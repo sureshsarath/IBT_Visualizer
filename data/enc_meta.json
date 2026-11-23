@@ -1,0 +1,36 @@
+{
+ "v": 1,
+ "kdf": "PBKDF2-SHA256",
+ "iter": 310000,
+ "salt": "HtuYektD2dO+cvP9RJJGYw==",
+ "check": {
+  "iv": "tMiWkbIYc74AAAAAAAAAAA==",
+  "ct": "IIKBLPC6g2R2JbZOSscD+A=="
+ },
+ "files": {
+  "ibt_main_canals.geojson": {
+   "iv": "UZ3HcictblUAAAAAAAAAAA==",
+   "size": 9615992
+  },
+  "ibt_other_canals.pmtiles": {
+   "iv": "/95PeIo183IAAAAAAAAAAA==",
+   "size": 85896435
+  },
+  "ibt_us3dhp_canals.pmtiles": {
+   "iv": "+wNTcR5y2HEAAAAAAAAAAA==",
+   "size": 13472963
+  },
+  "ibt_hydrobasins_lev05.geojson": {
+   "iv": "8H09wg/pjyAAAAAAAAAAAA==",
+   "size": 5732589
+  },
+  "ibt_country_counts.geojson": {
+   "iv": "HRAisDDleYQAAAAAAAAAAA==",
+   "size": 164444
+  },
+  "ibt_validation.json": {
+   "iv": "aV9AEKXuH9kAAAAAAAAAAA==",
+   "size": 47153
+  }
+ }
+}

@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IBT canals: width &amp; lining</title>
+<link rel="stylesheet" href="lib/maplibre-gl.css">
+<script src="lib/maplibre-gl.js"></script>
+<script src="lib/pmtiles.js"></script>
+<style>
+  :root{
+    --bg:#ffffff; --ink:#1d2329; --ink2:#4b5560; --muted:#7a848e; --line:#e4e7ea; --chip:#f3f5f7;
+    --lined:#D9731A; --unlined:#3B9BD6; --none:#9AA0A6; --accent:#1f6feb;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink)}
+  #map{position:absolute;inset:0}
+  #maint{position:absolute;left:12px;bottom:12px;width:320px;z-index:2;font-size:11.5px;background:var(--bg);color:var(--ink2);border-radius:10px;box-shadow:0 2px 14px rgba(0,0,0,.25);padding:7px 16px}
+  #maint a{color:var(--ink);font-weight:600;text-decoration:none;border-bottom:1px solid var(--muted)} #maint a:hover{border-bottom-color:var(--ink)}
+  #side{position:absolute;top:12px;left:12px;bottom:54px;width:320px;display:flex;flex-direction:column;z-index:2;pointer-events:none}
+  #panel,#tools-panel{background:var(--bg);color:var(--ink);border-radius:10px;box-shadow:0 2px 14px rgba(0,0,0,.25);padding:14px 16px;pointer-events:auto}
+  #panel{flex:0 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;padding:0}
+  #panel-inner{overflow-y:auto;overflow-x:hidden;padding:14px 16px;min-height:0}
+  #tools-panel{flex:0 0 auto;margin-top:10px}
+  #titlebox{flex:0 0 auto;margin-bottom:10px;background:var(--bg);color:var(--ink);border-radius:10px;box-shadow:0 2px 14px rgba(0,0,0,.25);padding:12px 16px;pointer-events:auto}
+  #titlebox h1{margin:0;font-size:17px;letter-spacing:.01em} #titlebox p{margin:2px 0 0;color:var(--ink2);font-size:12.5px}
+  body > #theme-btn{position:absolute;top:104px;right:10px;z-index:2;box-shadow:0 0 0 2px rgba(0,0,0,.1)}
+  #info{position:absolute;bottom:82px;right:12px;width:370px;max-width:calc(100% - 420px);max-height:calc(100% - 200px);overflow-y:auto;z-index:3;display:none;background:var(--bg);color:var(--ink);border-radius:10px;box-shadow:0 2px 14px rgba(0,0,0,.35);padding:14px 16px;font-size:12.5px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+  #info-close{position:absolute;top:6px;right:8px;font-size:20px;line-height:1;border:0;background:none;color:var(--ink2);cursor:pointer}
+  #info .pp h3{padding-right:20px}
+  .basin-label{font:600 11.5px system-ui,-apple-system,"Segoe UI",sans-serif;color:#ffd23f;text-shadow:0 0 3px #000,0 0 3px #000,0 0 1px #000;pointer-events:none;white-space:nowrap;letter-spacing:.02em;text-align:center;line-height:1.25}
+  .basin-label .bl-k{font-weight:500;font-size:10px;opacity:.9}
+  .click-dot{width:12px;height:12px;border-radius:50%;background:#ffd23f;border:2px solid #000;box-shadow:0 0 0 2px #fff}
+  #stats-panel{flex:0 0 auto;margin-top:10px;background:var(--bg);color:var(--ink);border-radius:10px;box-shadow:0 2px 14px rgba(0,0,0,.25);padding:14px 16px;pointer-events:auto}
+  #stats-btns{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+  #stats-btns button{flex:1;min-width:0;font:600 11.5px system-ui,sans-serif;display:flex;align-items:center;justify-content:center;gap:4px;border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:7px;padding:6px 4px;cursor:pointer}
+  #stats-btns button svg{width:14px;height:14px}
+  #stats-btns button.on,#stats-btns button:hover{border-color:var(--ink2)}
+  #cmodal{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center}
+  #cbox{background:var(--bg);color:var(--ink);border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.5);width:min(940px,94vw);max-height:90vh;display:flex;flex-direction:column}
+  #chead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 20px 8px;border-bottom:1px solid var(--line)}
+  #chead h3{margin:0;font-size:16px} #csub{margin:2px 0 0;color:var(--muted);font-size:12px} #csub:empty{display:none}
+  #cclose{font-size:22px;line-height:1;border:0;background:none;color:var(--ink2);cursor:pointer;padding:0 4px}
+  #cbody{overflow-y:auto;padding:4px 20px 20px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+  .cs{margin-top:18px} .cs h4{margin:0 0 2px;font-size:13.5px} .cn{margin:0 0 8px;color:var(--muted);font-size:12px;max-width:760px}
+  svg.ch{display:block;font:11px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:visible}
+  svg.ch .grid{stroke:var(--line);stroke-width:1} svg.ch .ax{fill:var(--muted)} svg.ch .lab{fill:var(--ink2)} svg.ch .val{fill:var(--ink2);font-variant-numeric:tabular-nums}
+  svg.ch .ttl{fill:var(--ink);font-weight:600;font-size:12px} svg.ch .xh{stroke:var(--muted);stroke-width:1}
+  svg.ch .hit:hover .lab{fill:var(--ink)}
+  body.dark svg.ch .hx{mix-blend-mode:screen} body:not(.dark) svg.ch .hx{mix-blend-mode:multiply}
+  svg.ch path.hit:hover{stroke:var(--ink);stroke-width:1.5}
+  .vgrid{display:flex;flex-wrap:wrap;gap:12px 12px;margin-top:6px}
+  .clg{display:flex;gap:16px;font-size:12px;color:var(--ink2)} .clg i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+  #cpop{position:fixed;z-index:31;display:none;background:var(--bg);border:1px solid var(--line);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.45);padding:4px}
+  #cpop button{font:600 12px system-ui,sans-serif;display:flex;align-items:center;gap:6px;border:0;background:var(--chip);color:var(--ink);border-radius:6px;padding:6px 10px;cursor:pointer}
+  #cpop button:hover{background:var(--line)} #cpop svg{width:14px;height:14px}
+  #ctip{position:fixed;z-index:30;display:none;pointer-events:none;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12px;line-height:1.4;box-shadow:0 4px 16px rgba(0,0,0,.4);max-width:300px}
+  #panel-inner{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+  #panel-inner::-webkit-scrollbar{width:8px;height:0}
+  #panel-inner::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+  #panel-inner::-webkit-scrollbar-track,#panel-inner::-webkit-scrollbar-corner{background:transparent}
+  #theme-btn{font:600 11px system-ui,sans-serif;border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:6px;padding:4px 8px;cursor:pointer;white-space:nowrap}
+  body.dark{color-scheme:dark;--bg:#2a1013;--ink:#f6f1f1;--ink2:#d6c9ca;--muted:#a8959a;--line:#4d2629;--chip:#3a1a1e}
+  body.dark select,body.dark input[type=search]{background:#3a1a1e;color:var(--ink);border-color:var(--line)}
+  body.dark #measure-btn,body.dark #measure-box button,body.dark .seg button{background:#3a1a1e;color:var(--ink);border-color:var(--line)}
+  body.dark #measure-btn.on,body.dark .seg button.on{background:#f1f3f5;color:#2a1013}
+  body.dark .switch span{background:#3a434b}
+  body.dark .switch input:checked+span{background:#f1f3f5}
+  body.dark .switch input:checked+span:after{background:#2a1013}
+  body.dark .maplibregl-popup-content{background:#2a1013;color:#f1f3f5;box-shadow:0 2px 14px rgba(0,0,0,.5)}
+  body.dark .maplibregl-popup-close-button{color:#c3cad1}
+  body.dark .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,body.dark .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,body.dark .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip{border-top-color:#2a1013}
+  body.dark .maplibregl-popup-anchor-top .maplibregl-popup-tip,body.dark .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,body.dark .maplibregl-popup-anchor-top-right .maplibregl-popup-tip{border-bottom-color:#2a1013}
+  body.dark .maplibregl-popup-anchor-left .maplibregl-popup-tip{border-right-color:#2a1013}
+  body.dark .maplibregl-popup-anchor-right .maplibregl-popup-tip{border-left-color:#2a1013}
+    body.dark .wscale i{background:#aab4bd}
+  body.dark .maplibregl-ctrl-group{background:#2a1013}
+  body.dark .maplibregl-ctrl-group button+button{border-top-color:#4d2629}
+  body.dark .maplibregl-ctrl-icon{filter:invert(1)}
+  body.dark .maplibregl-ctrl-scale{background:rgba(42,16,19,.75);color:#f1f3f5;border-color:#f1f3f5}
+  body.dark .maplibregl-ctrl-attrib{background:rgba(42,16,19,.8);color:#c3cad1}
+  body.dark .maplibregl-ctrl-attrib a{color:#c3cad1}
+  #panel h1{font-size:16px;margin:0 0 2px}
+  .sub{color:var(--ink2);margin:0 0 10px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0 12px}
+  .stat{background:var(--chip);border-radius:8px;padding:6px 8px}
+  .stat b{display:block;font-size:15px}
+  .stat span{display:block;color:var(--muted);font-size:11px;line-height:1.3}
+  .cmx{margin:0 0 14px} .cmx-t{font-weight:600;font-size:12.5px;margin-bottom:6px}
+  .cmx table{border-collapse:separate;border-spacing:3px;width:100%} .cmx th{font-weight:400;color:var(--muted);font-size:11px;text-align:left;padding:2px 4px}
+  .cmx td{border-radius:6px;padding:8px;text-align:center} .cmx td b{display:block;font-size:15px} .cmx td span{color:var(--muted);font-size:11px} .cmx-n{color:var(--muted);font-size:11px;margin-top:4px}
+  .mtab{border-collapse:collapse;margin:10px 0 0;font-size:12px} .mtab th{font-weight:400;color:var(--muted);text-align:right;padding:3px 10px} .mtab th:first-child{text-align:left}
+  .mtab th i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px} .mtab td{padding:3px 10px;text-align:right;border-top:1px solid var(--line)} .mtab td:first-child{text-align:left;color:var(--ink2)}
+  .howto{margin:10px 0 0;font-size:11.5px;line-height:1.5;color:var(--ink2);max-width:520px} .howto b{color:var(--ink)}
+  #lock{position:fixed;inset:0;z-index:10000;background:rgba(18,8,10,.88);backdrop-filter:blur(3px);align-items:center;justify-content:center;font-family:system-ui,sans-serif}
+  #lock-form{background:#2a1013;color:#f3ece6;border-radius:12px;padding:26px 28px;width:min(360px,90vw);box-shadow:0 8px 40px rgba(0,0,0,.5)}
+  #lock-form h2{margin:0 0 6px;font-size:19px;text-transform:none;letter-spacing:0;color:#f3ece6;font-weight:700} #lock-form p{margin:0 0 16px;font-size:12.5px;color:#c9b8b3;line-height:1.45}
+  #lock-form input[type=password]{width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid #4d2629;background:#3a1a1e;color:#f3ece6;font-size:14px}
+  .lock-rem{display:flex;align-items:center;gap:6px;margin:10px 0 14px;font-size:12px;color:#c9b8b3}
+  #lock-form button{width:100%;padding:9px;border-radius:8px;border:0;background:#f3ece6;color:#2a1013;font-weight:600;font-size:14px;cursor:pointer}
+  #lock-form button:disabled{opacity:.6;cursor:wait} #lock-err{color:#ff8a80;font-size:12px;margin-top:10px;min-height:14px}
+  .stat b.sub{margin:5px 0 0;padding-top:4px;border-top:1px solid var(--line);font-size:15px;color:var(--ink)}
+  h2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+  .legend-row{display:flex;align-items:center;gap:8px;margin:3px 0;cursor:pointer;user-select:none}
+  .legend-row input{margin:0}
+  .sw{width:34px;height:0;border-top:4px solid;border-radius:2px}
+  .sw.dash{border-top-style:dashed}
+  .count{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums}
+  .wscale{display:flex;align-items:flex-end;gap:14px;margin:4px 0 2px}
+  .wscale div{text-align:center;color:var(--ink2);font-size:11px}
+  .wscale i{display:block;width:34px;background:#5b6670;border-radius:2px;margin:0 auto 3px}
+  label.ctl{display:flex;align-items:center;gap:8px;margin:4px 0}
+  select,input[type=search]{font:inherit;padding:5px 7px;border:1px solid var(--line);border-radius:6px;width:100%}
+  input[type=range]{width:100%}
+  .rangeval{color:var(--ink2);font-variant-numeric:tabular-nums}
+  #results{margin-top:4px;max-height:160px;overflow:auto}
+  #results div{padding:4px 6px;border-radius:5px;cursor:pointer}
+  #results div:hover{background:var(--chip)}
+  #results small{color:var(--muted)}
+  .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .seg button{flex:1 1 auto;font:inherit;font-size:12px;white-space:nowrap;border:0;background:#fff;padding:5px 7px;cursor:pointer;color:var(--ink2)}
+  .seg button.on{background:var(--ink);color:#fff}
+  .note{color:var(--muted);font-size:11px;margin-top:12px}
+  .maplibregl-popup-content{padding:12px 14px;border-radius:9px;font-size:12.5px;min-width:250px}
+  .pp h3{margin:0 0 2px;font-size:14px}
+  .pp .en{color:var(--ink2);margin-bottom:6px}
+  .pp table{border-collapse:collapse;width:100%}
+  .pp td{padding:2px 0;vertical-align:top}
+  .pp td:first-child{color:var(--muted);padding-right:10px;white-space:nowrap}
+  .pp td:last-child{font-variant-numeric:tabular-nums}
+  .pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;color:#fff}
+  .pp hr{border:0;border-top:1px solid var(--line);margin:6px 0}
+  #toggle{display:none}
+  .tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  #measure-btn{font:600 12px system-ui,sans-serif;display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:7px;padding:6px 10px;cursor:pointer;color:var(--ink)}
+  #measure-btn svg{width:15px;height:15px}
+  #measure-btn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .switch{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+  .switch input{display:none}
+  .switch span{width:32px;height:18px;border-radius:9px;background:#c9cfd5;position:relative;transition:.15s}
+  .switch span:after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:.15s}
+  .switch input:checked+span{background:var(--ink)}
+  .switch input:checked+span:after{left:16px}
+  #measure-box{margin-top:8px;background:var(--chip);border-radius:8px;padding:8px 10px;display:none;font-size:12.5px}
+  #measure-box b{font-size:17px;display:block;font-variant-numeric:tabular-nums}
+  #measure-box .hint{color:var(--muted);font-size:11px;margin-top:3px}
+  #measure-box button{font:inherit;font-size:11.5px;margin-top:6px;margin-right:4px;border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 8px;cursor:pointer}
+  .range{color:var(--ink2)}
+  .rangebar{position:relative;height:12px;margin:5px 0 3px;width:100%;max-width:170px;overflow:hidden}
+  .rangebar:before{content:"";position:absolute;left:0;right:0;top:3px;height:6px;background:var(--chip);border-radius:3px}
+  .rangebar i{position:absolute;top:3px;height:6px;border-radius:3px}
+  .rangebar .bdot{position:absolute;top:1px;width:10px;height:10px;margin-left:-5px;border-radius:50%;box-sizing:border-box;border:1.5px solid var(--bg)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
+  @media (max-width:640px){#side{width:calc(100% - 24px);bottom:auto;max-height:60%}}
+</style>
+</head>
+<body class="dark" data-palette="#D9731A,#3B9BD6">
+<div id="map"></div>
+
+<div id="cmodal"><div id="cbox">
+  <div id="chead"><div><h3 id="ctitle"></h3><p id="csub"></p></div><button id="cclose" type="button" title="Close (Esc)">&times;</button></div>
+  <div id="cbody"></div></div></div>
+<div id="ctip"></div>
+<div id="cpop"><button type="button" id="cpop-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Show on map</button></div>
+<div id="info"><button id="info-close" type="button" title="Close (Esc)">&times;</button><div id="info-body"></div></div>
+<div id="maint">Maintained by <a href="https://sureshsarath.github.io/" target="_blank" rel="noopener">Sarath Suresh</a>, Virginia Tech</div>
+<button id="theme-btn" type="button" title="Switch light / dark">Light</button>
+<div id="side">
+<div id="titlebox"><h1>Inter-basin Water Transfers</h1><p>Width and Lining information for main canals</p></div>
+<div id="panel"><div id="panel-inner">
+  <div class="stats" id="stats" style="margin-top:0"></div>
+
+  <h2>Lining (colour)</h2>
+  <div id="lining-legend"></div>
+
+  <h2>Predicted width (thickness)</h2>
+  <div class="wscale" id="wscale"></div>
+
+  <h2>Filters</h2>
+  <label style="display:block">Minimum canal length: <span class="rangeval" id="lenval"></span></label>
+  <input type="range" id="minlen" min="0" max="200" step="5" value="0">
+
+
+  <h2>Basemap</h2>
+  <div class="seg" id="basemap">
+    <button data-b="google" id="google-btn" class="on" title="Google satellite imagery">Google Satellite</button><button data-b="imagery">ESRI World Imagery</button><button data-b="light">Light</button>
+  </div>
+
+</div></div>
+<div id="tools-panel">
+  <h2 style="margin-top:0">Tools</h2>
+  <div class="tools">
+    <button id="measure-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/></svg>Measure distance</button>
+    <label class="switch"><input type="checkbox" id="hide-canals"><span></span>Hide canals</label>
+  </div>
+  <div id="measure-box"><span style="color:var(--muted)">Measured length</span><b id="m-total">0 m</b>
+    <div id="m-seg" class="hint"></div>
+    <div class="hint" id="m-hint">Click on the map to add points. Double-click or Enter to finish the line, Esc to stop measuring.</div>
+    <button id="m-new">New line</button><button id="m-close">Stop measuring</button></div>
+
+</div>
+<div id="stats-panel">
+  <h2 style="margin-top:0">Stats</h2>
+  <div id="stats-btns">
+    <button type="button" data-s="width"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Width</button>
+    <button type="button" data-s="length"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h11M4 18h6"/></svg>Length</button>
+    <button type="button" data-s="lining"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 4c-3 5-3 11 0 16M7 4c3 5 3 11 0 16M17 4c-3 5-3 11 0 16M17 4c3 5 3 11 0 16"/></svg>Lining</button>
+    <button type="button" data-s="count"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Count</button>
+    <button type="button" data-s="validation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>Validation</button>
+  </div>
+</div>
+</div>
+
+<script>
+// ---------------- config ----------------
+const DATA_URL = "data/ibt_main_canals.geojson";   // later: "https://<r2-bucket>/ibt_main_canals.pmtiles"
+const SOURCE_LAYER = "canals";                      // vector layer name inside the PMTiles
+const COL = {lined:"#D9731A", unlined:"#3B9BD6", none:"#9AA0A6"};
+const SRC_SHORT = {combined:"combined", esri:"Esri", planet:"Planet", none:"none"};
+const SRC_LABEL = {combined:"Esri + Planet (best)", esri:"Esri only", planet:"Planet only", none:"No width"};
+const BASEMAPS = {
+  imagery:{tiles:["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+           labels:"https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+           attr:"Imagery &copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community", dark:true},
+  light:{tiles:["https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"],
+         labels:"https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+         attr:"Basemap &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors", dark:false}
+};
+
+// ---------------- map ----------------
+const isPM = DATA_URL.endsWith(".pmtiles");
+const pmProto = new pmtiles.Protocol(); maplibregl.addProtocol("pmtiles", pmProto.tile);
+// ---------------- password protection (encrypted data on the public site) ----------------
+// If data/enc_meta.json exists (published site), the data files are AES-256-CTR encrypted (encrypt_site.py) and the
+// viewer asks for the password first. Without it (local preview), the plaintext files are read as before.
+let ENC = null, KEY = null;
+const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+function ctrDecrypt(buf, ivB64, block){
+  const counter = b64d(ivB64); new DataView(counter.buffer).setBigUint64(8, BigInt(block));
+  return crypto.subtle.decrypt({name:"AES-CTR", counter, length:64}, KEY, buf);
+}
+async function getJSON(url){
+  const name = url.split("/").pop();
+  if (!ENC){ const r = await fetch(url); if (!r.ok) throw new Error(url); return r.json(); }
+  const r = await fetch(new URL("data/" + name + ".enc", location.href)); if (!r.ok) throw new Error(name);
+  return JSON.parse(new TextDecoder().decode(await ctrDecrypt(await r.arrayBuffer(), ENC.files[name].iv, 0)));
+}
+// PMTiles source that reads byte ranges of an encrypted .pmtiles.enc file and decrypts just that range
+class EncSource {
+  constructor(url, name){ this.url = url; this.name = name; this.enc = new URL("data/" + name + ".enc", location.href).href; }
+  getKey(){ return this.url; }
+  async getBytes(offset, length, signal){
+    const start = Math.floor(offset / 16) * 16, end = offset + length - 1;
+    const r = await fetch(this.enc, {headers:{Range:`bytes=${start}-${end}`}, signal});
+    if (!r.ok) throw new Error("tile read failed: " + r.status);
+    let buf = await r.arrayBuffer();
+    if (r.status === 200) buf = buf.slice(start, end + 1);          // server ignored the range request
+    const pt = await ctrDecrypt(buf, ENC.files[this.name].iv, start / 16);
+    return {data: pt.slice(offset - start, offset - start + length)};
+  }
+}
+async function deriveKey(pw){
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2", salt:b64d(ENC.salt), iterations:ENC.iter, hash:"SHA-256"}, base,
+    {name:"AES-CTR", length:256}, true, ["decrypt"]);
+}
+async function keyOK(k){
+  const old = KEY; KEY = k;
+  try { return new TextDecoder().decode(await ctrDecrypt(b64d(ENC.check.ct), ENC.check.iv, 0)) === "IBT-VIEWER-OK-v1"; }
+  catch(e){ return false; } finally { KEY = old; }
+}
+const KEY_STORE = "ibt_viewer_key_v1";
+const UNLOCK = (async () => {
+  let r; try { r = await fetch("data/enc_meta.json", {cache:"no-cache"}); } catch(e){ return; }
+  if (!r.ok) return;                                                   // no encryption: local preview
+  ENC = await r.json();
+  try { const s = localStorage.getItem(KEY_STORE);
+    if (s){ const k = await crypto.subtle.importKey("raw", b64d(s), {name:"AES-CTR"}, true, ["decrypt"]); if (await keyOK(k)){ KEY = k; return; } localStorage.removeItem(KEY_STORE); } } catch(e){}
+  const lock = document.getElementById("lock"), form = document.getElementById("lock-form"), err = document.getElementById("lock-err"), btn = form.querySelector("button");
+  lock.style.display = "flex"; document.getElementById("lock-pw").focus();
+  await new Promise(done => { form.onsubmit = async ev => {
+    ev.preventDefault(); err.textContent = ""; btn.disabled = true; btn.textContent = "Checking…";
+    const k = await deriveKey(document.getElementById("lock-pw").value);
+    if (await keyOK(k)){
+      KEY = k;
+      if (document.getElementById("lock-rem").checked){ try { const raw = new Uint8Array(await crypto.subtle.exportKey("raw", k)); localStorage.setItem(KEY_STORE, btoa(String.fromCharCode(...raw))); } catch(e){} }
+      lock.style.display = "none"; done();
+    } else { err.textContent = "Wrong password. Please try again."; btn.disabled = false; btn.textContent = "Open viewer"; document.getElementById("lock-pw").select(); }
+  }; });
+})();
+
+const OTHERS_URL = new URL("data/ibt_other_canals.pmtiles", location.href).href;
+const US3DHP_URL = new URL("data/ibt_us3dhp_canals.pmtiles", location.href).href;
+const MINOR_LAYERS = ["others-line", "us3dhp-line"];   // GRAIN minor canals + USGS 3DHP minor canals
+
+function basemapStyle(key){
+  if (key === "google"){
+    return {version:8, sources:{base:{type:"raster", tiles:[0,1,2,3].map(i => `https://mt${i}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}`),
+            tileSize:256, maxzoom:20, attribution:"Imagery &copy; Google"}}, layers:[{id:"base",type:"raster",source:"base"}]};
+  }
+  const b = BASEMAPS[key];
+  const s = {version:8, sources:{base:{type:"raster",tiles:b.tiles,tileSize:256,maxzoom:19,attribution:b.attr}},
+             layers:[{id:"base",type:"raster",source:"base"}]};
+  if (b.labels){ s.sources.ref={type:"raster",tiles:[b.labels],tileSize:256,maxzoom:19}; s.layers.push({id:"ref",type:"raster",source:"ref",paint:{"raster-opacity":0.85}}); }
+  return s;
+}
+
+const map = new maplibregl.Map({container:"map", style:basemapStyle("google"), center:[60,28], zoom:2.6, maxZoom:18,
+  attributionControl:{compact:true, customAttribution:"Canals: GRAIN v1.1 &middot; Widths and lining derived from Esri World Imagery (Esri, Maxar, Earthstar Geographics, and the GIS User Community) and PlanetScope imagery. Includes copyrighted material of Planet Labs PBC. All rights reserved (NASA CSDA) &middot; Basins: HydroBASINS (Lehner &amp; Grill 2013)"}});
+map.addControl(new maplibregl.NavigationControl({visualizePitch:false}), "top-right");
+map.addControl(new maplibregl.ScaleControl({unit:"metric"}), "bottom-right");
+
+// line width: grows with zoom and with canal width (m); capped so 90 m canals stay legible
+const W = ["min", ["coalesce", ["get","w"], 6], 90];
+function widthExpr(add=0){ return ["interpolate", ["exponential", 1.6], ["zoom"],
+  2, ["+", 0.5 + add, ["/", W, 40]],
+  6, ["+", 1.0 + add, ["/", W, 14]],
+  10, ["+", 1.5 + add, ["/", W, 5]],
+  14, ["+", 2.0 + add, ["/", W, 1.6]]]; }
+const colorExpr = ["match", ["get","lin"], "lined", COL.lined, "unlined", COL.unlined, COL.none];
+
+let filters = {lin:new Set(["lined","unlined","none"]), src:new Set(["combined","esri","planet","none"]), minlen:0, provisional:true};
+let DATA = null;
+
+function addCanals(){
+  const srcDef = isPM ? {type:"vector", url:"pmtiles://"+DATA_URL} : {type:"geojson", data: DATA || DATA_URL, promoteId:"id"};
+  if (!map.getSource("others")) map.addSource("others", {type:"vector", url:"pmtiles://"+OTHERS_URL});
+  if (!map.getLayer("others-line")) map.addLayer({id:"others-line", type:"line", source:"others", "source-layer":"others",
+    layout:{"line-cap":"round","line-join":"round", visibility: (canalsHidden || !othersOn) ? "none" : "visible"},
+    paint:{"line-color": currentBase === "light" ? "#5f6b75" : "#ffffff", "line-opacity":["interpolate",["linear"],["zoom"],3,0.45,9,0.8],
+           "line-width":["interpolate",["exponential",1.5],["zoom"],3,0.4,8,0.8,12,1.5,15,2.5]}});
+  if (!map.getSource("us3dhp")) map.addSource("us3dhp", {type:"vector", url:"pmtiles://"+US3DHP_URL});
+  if (!map.getLayer("us3dhp-line")) map.addLayer({id:"us3dhp-line", type:"line", source:"us3dhp", "source-layer":"others",
+    layout:{"line-cap":"round","line-join":"round", visibility: (canalsHidden || !othersOn) ? "none" : "visible"},
+    paint:{"line-color": currentBase === "light" ? "#5f6b75" : "#ffffff", "line-opacity":["interpolate",["linear"],["zoom"],3,0.45,9,0.8],
+           "line-width":["interpolate",["exponential",1.5],["zoom"],3,0.4,8,0.8,12,1.5,15,2.5]}});
+  if (!map.getSource("canals")) map.addSource("canals", srcDef);
+  if (map.getLayer("canals-solid")) return;
+  const sl = isPM ? {"source-layer":SOURCE_LAYER} : {};
+  const dark = currentBase === "google" ? true : BASEMAPS[currentBase].dark;
+  map.addLayer({id:"casing", type:"line", source:"canals", ...sl,
+    layout:{"line-cap":"round","line-join":"round"},
+    paint:{"line-color": dark ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.9)", "line-width":widthExpr(1.6)}});
+  map.addLayer({id:"canals-solid", type:"line", source:"canals", ...sl,
+    layout:{"line-cap":"round","line-join":"round"},
+    paint:{"line-color":colorExpr, "line-width":widthExpr()}});
+  map.addLayer({id:"canals-dash", type:"line", source:"canals", ...sl,
+    layout:{"line-cap":"butt","line-join":"round"},
+    paint:{"line-color":colorExpr, "line-width":widthExpr(), "line-dasharray":[1.6,1.1]}});
+  map.addLayer({id:"hover", type:"line", source:"canals", ...sl,
+    layout:{"line-cap":"round","line-join":"round"},
+    paint:{"line-color":"#ffffff","line-width":widthExpr(3), "line-opacity":["case",["boolean",["feature-state","hover"],false],0.9,0]}}, "casing");
+  addSelLayers();
+  applyFilters(); applyFocus();
+}
+
+function baseFilter(){
+  const f = ["all",
+    ["in", ["coalesce",["get","lin"],"none"], ["literal",[...filters.lin]]],
+    ["in", ["coalesce",["get","wsrc"],"none"], ["literal",[...filters.src]]],
+    [">=", ["coalesce",["get","len"],0], filters.minlen]];
+  return f;
+}
+const isProv = ["any", ["!=", ["coalesce",["get","lsrc"],""], "esri"], ["==", ["coalesce",["get","lin"],"none"], "none"]];
+let canalsHidden = false, othersOn = true, planetStyle = false;
+// yellow border around the selected (clicked) canal: a wider yellow line drawn just under the canal itself
+const SEL_NONE = ["==", ["get","id"], "__none__"];
+function addSelLayers(){
+  const sl = isPM ? {"source-layer":SOURCE_LAYER} : {};
+  if (!map.getLayer("sel-main")) map.addLayer({id:"sel-main", type:"line", source:"canals", ...sl, filter:SEL_NONE,
+    layout:{"line-cap":"round","line-join":"round"}, paint:{"line-color":"#ff2d2d", "line-width":widthExpr(3.5)}}, "canals-solid");
+  for (const ML of MINOR_LAYERS) if (map.getLayer(ML) && !map.getLayer("sel-"+ML)) map.addLayer({id:"sel-"+ML, type:"line", source:map.getLayer(ML).source, "source-layer":"others", filter:SEL_NONE,
+    layout:{"line-cap":"round","line-join":"round"}, paint:{"line-color":"#ff2d2d", "line-width":["interpolate",["exponential",1.5],["zoom"],3,2.6,8,3.2,12,4.5,15,6.5]}}, ML);
+}
+function updateSel(){
+  const f = currentPopup ? ["==", ["get","id"], String(currentPopup)] : SEL_NONE;
+  for (const id of ["sel-main", ...MINOR_LAYERS.map(m => "sel-"+m)]) if (map.getLayer(id)){
+    map.setFilter(id, f); map.setLayoutProperty(id, "visibility", canalsHidden ? "none" : "visible");
+  }
+}
+function setCanalVisibility(){
+  for (const id of ["casing","canals-solid","canals-dash","hover"])
+    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", canalsHidden ? "none" : "visible");
+  updateSel();
+  for (const id of MINOR_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", (canalsHidden || !othersOn) ? "none" : "visible");
+}
+function applyFilters(){
+  if (!map.getLayer("canals-solid")) return;
+  const f = baseFilter();
+  map.setFilter("canals-solid", [...f, ["!", isProv]]);
+  map.setFilter("canals-dash", filters.provisional ? [...f, isProv] : ["==", 1, 0]);
+  map.setFilter("casing", filters.provisional ? f : [...f, ["!", isProv]]);
+  map.setFilter("hover", f);
+  setCanalVisibility();
+  updateStats();
+}
+
+// ---------------- data + panel ----------------
+function fmt(n){ return n.toLocaleString(undefined,{maximumFractionDigits:0}); }
+// totals for ALL IBTs (main + minor canals, incl. networks without a main canal); pre-computed, not affected by the filters
+const ALL_IBT = {nets:4629, km:658347, canals:368805};
+function updateStats(){
+  if (!DATA) return;
+  let n=0, km=0, wsum=0, lined=0, linedKnown=0; const nets=new Set();
+  for (const ft of DATA.features){
+    const p = ft.properties, lin=p.lin||"none", src=p.wsrc||"none";
+    if (!filters.lin.has(lin) || !filters.src.has(src) || (p.len||0) < filters.minlen) continue;
+    if (!filters.provisional && (p.lsrc!=="esri" || lin==="none")) continue;
+    n++; km += p.len||0; if (p.sys!==undefined && p.sys!==null) nets.add(p.sys);
+    if (lin!=="none"){ linedKnown++; if (lin==="lined") lined++; }
+  }
+  document.getElementById("stats").innerHTML =
+    `<div class="stat" title="All IBT networks, including the ones made only of minor canals (fixed total)"><b>${fmt(ALL_IBT.nets)}</b><span>IBT networks</span>
+        <b class="sub" title="IBT networks with at least one main canal (after filters)">${fmt(nets.size)}</b><span>with canals atleast >20km</span></div>
+     <div class="stat" title="Length of all IBT canals, main + minor (fixed total)"><b>${fmt(ALL_IBT.km)} km</b><span>canal length</span>
+        <b class="sub" title="Length of the main canals shown (after filters)">${fmt(km)} km</b><span>main canals</span></div>
+     <div class="stat" title="Share of main canals with a lining estimate that are lined"><b>${linedKnown? Math.round(100*lined/linedKnown):0}%</b><span>lined (main canals)</span></div>
+     <div class="stat" title="All IBT canals, main + minor (fixed total)"><b>${fmt(ALL_IBT.canals)}</b><span>IBT canals</span>
+        <b class="sub" title="Main canals shown (after filters)">${fmt(n)}</b><span>main canals shown</span></div>`;
+}
+
+function buildLegends(){
+  const cnt = {lin:{}, src:{}};
+  for (const ft of DATA.features){ const p=ft.properties; cnt.lin[p.lin||"none"]=(cnt.lin[p.lin||"none"]||0)+1; cnt.src[p.wsrc||"none"]=(cnt.src[p.wsrc||"none"]||0)+1; }
+  const ll = document.getElementById("lining-legend");
+  ll.innerHTML = [["lined","Lined"],["unlined","Unlined"]].map(([k,l]) =>
+    `<label class="legend-row"><input type="checkbox" data-lin="${k}" checked><span class="sw" style="border-color:${COL[k]}"></span>${l}<span class="count">${fmt(cnt.lin[k]||0)}</span></label>`).join("") +
+    `<label class="legend-row" title="All minor GRAIN v1.1 IBT canals (smaller canals, ditches and drains), shown without lining or width styling"><input type="checkbox" id="others-chk" checked><span class="sw" style="border-color:#ffffff;border-top-width:2px;box-shadow:0 0 0 1px rgba(0,0,0,.35)"></span>Minor IBT canals<span class="count">363,388</span></label>`;
+  ll.insertAdjacentHTML("beforeend", `<label class="ctl" style="margin:6px 0 0;font-size:12px;color:var(--ink2)" title="Planet-only widths and lining for the minor IBT canals. Planet lining is provisional (it over-calls lining compared with Esri)."><input type="checkbox" id="planet-style"> Color &amp; size Minor IBT canals where available (Note: only contains info from Planet data)</label>`);
+  document.getElementById("planet-style").onchange = e => { planetStyle = e.target.checked; applyFocus(); };
+  document.getElementById("others-chk").onchange = e => { othersOn = e.target.checked; setCanalVisibility(); };
+  ll.querySelectorAll("input[data-lin]").forEach(i => i.onchange = () => { i.checked ? filters.lin.add(i.dataset.lin) : filters.lin.delete(i.dataset.lin); applyFilters(); });
+  document.getElementById("wscale").innerHTML = [5,15,40,80].map(w =>
+    `<div><i style="height:${Math.max(1.5, 1+w/14)}px"></i>${w} m</div>`).join("");
+}
+
+// ---------------- popup ----------------
+function v(x, unit=" m"){ return (x===undefined||x===null) ? "&ndash;" : (typeof x==="number" ? x.toLocaleString(undefined,{maximumFractionDigits:1})+unit : x); }
+function canalNameCell(tr, orig){
+  if (!tr && !orig) return `<span style="color:var(--muted)">Unnamed</span>`;
+  const t = tr || orig;
+  return esc(t) + (orig && orig !== t ? `<div style="color:var(--muted);font-size:11.5px">${esc(orig)}</div>` : "");
+}
+function sysTitle(name, orig){
+  const t = name || orig;
+  const k = `<span style="font-weight:400;color:var(--ink2)">IBT System:</span> `;
+  if (!t) return `<h3>${k}Unnamed</h3>`;
+  return `<h3>${k}${esc(t)}</h3>` + (orig && orig !== t ? `<div class="en">${esc(orig)}</div>` : "");
+}
+// data source of each canal, from its IBT id
+function srcLabel(id){
+  id = String(id||"");
+  if (id.startsWith("IBT_USA_3D")) return `<span title="USGS 3D Hydrography Program (3DHP), CONUS canal snapshot of 2026-01-12; IBT canals not in GRAIN">USGS 3DHP (CONUS, 2026-01-12)</span>`;
+  const m = id.match(/^IBT_IND_(\d+)$/);
+  if (m && +m[1] >= 10423 && +m[1] <= 10854) return `<span title="Indira Gandhi Canal link and offshoots added from the GRAIN v1.1 release">GRAIN v1.1</span>`;
+  return `<span title="IBT canals derived from GRAIN v1.0">GRAIN v1.0</span>`;
+}
+const CC_NAME = {"CAN":"Canada","USA":"United States","KAZ":"Kazakhstan","ARG":"Argentina","CHL":"Chile","SOM":"Somalia","KEN":"Kenya","SDN":"Sudan","RUS":"Russia","NOR":"Norway","ZAF":"South Africa","MEX":"Mexico","URY":"Uruguay","BRA":"Brazil","BOL":"Bolivia","PER":"Peru","COL":"Colombia","NIC":"Nicaragua","VEN":"Venezuela","FRA":"France","ECU":"Ecuador","MLI":"Mali","NGA":"Nigeria","MOZ":"Mozambique","MDG":"Madagascar","TUN":"Tunisia","DZA":"Algeria","KHM":"Cambodia","THA":"Thailand","LAO":"Laos","MMR":"Myanmar","VNM":"Vietnam","PRK":"North Korea","KOR":"South Korea","IND":"India","BGD":"Bangladesh","NPL":"Nepal","PAK":"Pakistan","AFG":"Afghanistan","TJK":"Tajikistan","KGZ":"Kyrgyzstan","TKM":"Turkmenistan","SWE":"Sweden","BLR":"Belarus","UKR":"Ukraine","POL":"Poland","AUT":"Austria","HUN":"Hungary","ROU":"Romania","DEU":"Germany","GRC":"Greece","ALB":"Albania","CHE":"Switzerland","NLD":"Netherlands","PRT":"Portugal","ESP":"Spain","NZL":"New Zealand","AUS":"Australia","CHN":"China","ITA":"Italy","GBR":"United Kingdom","MYS":"Malaysia","FIN":"Finland","SVK":"Slovakia","CZE":"Czechia","MAR":"Morocco","EGY":"Egypt","ETH":"Ethiopia","SRB":"Serbia"};
+function ccName(cc){ return CC_NAME[cc] || cc || "&ndash;"; }
+function popupHTML(p){
+  const lin = p.lin||"none";
+  const pill = `<span class="pill" style="background:${COL[lin]}">${lin==="none"?"no estimate":lin}</span>`;
+  return `<div class="pp">${sysTitle(p.sys_tr, p.sys_name)}
+   <table>
+    <tr><td>Individual canal name</td><td>${canalNameCell(p.name_tr, p.name)}</td></tr>
+    <tr><td>IBT id</td><td>${p.id} &middot; ${p.cc}</td></tr>
+    <tr><td>Country</td><td>${esc(ccName(p.cc))}</td></tr>
+    <tr><td>Source</td><td>${srcLabel(p.id)}</td></tr>
+    <tr><td>IBT system length</td><td>${v(p.sys_km," km")}</td></tr>
+    <tr><td>Canal length</td><td>${v(p.len," km")}</td></tr>
+    <tr><td>L5 basins</td><td>${basRow(p)}</td></tr>
+   </table><hr>
+   <table>
+    <tr><td><span class="dot" style="background:${DOT.pred}"></span><b>Modelled width</b></td><td><b>${v(p.w)}</b></td></tr>
+    ${rangeRow(p)}
+    <tr><td><span class="dot" style="background:${DOT.esri}"></span>Width ESRI</td><td>${v(p.oe)}</td></tr>
+    <tr><td><span class="dot" style="background:${DOT.planet}"></span>Width Planet</td><td>${v(p.op)}</td></tr>
+    <tr><td>Valid observations</td><td>Esri ${p.nv_e ?? 0} &middot; Planet ${p.nv_p ?? 0}</td></tr>
+   </table><hr>
+   <table>
+    <tr><td><b>Lining</b></td><td>${pill} ${p.pl!==undefined ? "p = "+p.pl.toFixed(2) : ""}</td></tr>
+    <tr><td>Lining source</td><td>${p.lsrc||"none"}</td></tr>
+   </table></div>`;
+}
+
+function fmt1(x){ return x.toLocaleString(undefined,{maximumFractionDigits:1}); }
+const DOT = {pred:"var(--ink)", esri:"#F2C84B", planet:"#C08BF2"};
+function rangeRow(p){
+  const w=p.w, p10=p.w_p10, p90=p.w_p90;
+  if (p10===undefined || w===undefined) return "";
+  const vals=[p10,p90,w,p.oe,p.op].filter(x=>x!==undefined&&x!==null);
+  const lo=Math.min(...vals)*0.9, hi=Math.max(...vals)*1.1, fr=x=>Math.min(1,Math.max(0,(x-lo)/(hi-lo))), pos=x=>`calc(6px + (100% - 12px) * ${fr(x).toFixed(4)})`;
+  const dot=(x,c,t)=> (x===undefined||x===null) ? "" : `<b class="bdot" style="left:${pos(x)};background:${c}" title="${t}: ${fmt1(x)} m"></b>`;
+  return `<tr><td title="80% chance the true width lies in this range (from cross-validation)">Modelled width range</td><td>${fmt1(p10)}&ndash;${fmt1(p90)} m
+    <div class="rangebar" title="Bar: 80% range of the modelled width. Dots: modelled (white), width ESRI (yellow), width Planet (purple); ESRI and Planet are the median of the measured boxes">
+      <i style="left:${pos(p10)};width:calc((100% - 12px) * ${(fr(p90)-fr(p10)).toFixed(4)});background:#8a6d70"></i>
+      ${dot(p.op,DOT.planet,"Width Planet")}${dot(p.oe,DOT.esri,"Width ESRI")}${dot(w,DOT.pred,"Modelled width")}</div></td></tr>`;
+}
+
+// system name / length for minor canals, looked up from the main canals of the same network
+let SYSINFO = null;
+function sysInfo(nets){
+  if (!SYSINFO && DATA){ SYSINFO = {}; for (const f of DATA.features){ const q=f.properties; if (q.sys!==undefined && !SYSINFO[q.sys]) SYSINFO[q.sys] = {tr:q.sys_tr, name:q.sys_name, km:q.sys_km}; } }
+  for (const k of String(nets||"").split("|").filter(Boolean)) if (SYSINFO && SYSINFO[k]) return SYSINFO[k];
+  return null;
+}
+function othersPopupHTML(p){
+  const w = (p.w !== undefined && p.w !== null) ? `<b>${v(p.w)}</b> <span style="color:var(--muted)">Planet &middot; ${p.nv} valid observation${p.nv==1?"":"s"}</span>` : `<span style="color:var(--muted)">No width</span>`;
+  const si = sysInfo(p.nets) || (p.sn ? {tr:p.sn, name:p.sn, km:p.sk} : null);
+  return `<div class="pp">${sysTitle(si ? si.tr : null, si ? si.name : null)}
+   <table>
+    <tr><td>Individual canal name</td><td>${canalNameCell(null, p.nm)}</td></tr>
+    <tr><td>IBT id</td><td>${p.id} &middot; ${p.cc}</td></tr>
+    <tr><td>Country</td><td>${esc(ccName(p.cc))}</td></tr>
+    <tr><td>Source</td><td>${srcLabel(p.id)}</td></tr>
+    ${si ? `<tr><td>IBT system length</td><td>${v(si.km," km")}</td></tr>` : ""}
+    <tr><td>Canal length</td><td>${v(p.len," km")}</td></tr>
+    <tr><td>L5 basins</td><td>${basRow(p)}</td></tr>
+    <tr><td>Width (Planet)</td><td>${w}</td></tr>
+    ${p.lin ? `<tr><td>Lining (Planet)</td><td><span class="pill" style="background:${COL[p.lin]}">${p.lin}</span> p = ${(+p.pl).toFixed(2)} <span style="color:var(--muted)">provisional</span></td></tr>` : ""}
+   </table></div>`;
+}
+let hoverId = null;
+function bindInteraction(){
+  for (const id of MINOR_LAYERS){
+    map.on("mouseenter", id, () => { if (!measuring) map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", id, () => { if (!measuring) map.getCanvas().style.cursor = ""; });
+  }
+  // one click handler: main canals first (3 px tolerance), then thin minor canals (5 px); empty map clears the focus
+  map.on("click", e => {
+    if (measuring) return;
+    const box = r => [[e.point.x-r, e.point.y-r],[e.point.x+r, e.point.y+r]];
+    const mainL = ["canals-solid","canals-dash"].filter(l => map.getLayer(l) && map.getLayoutProperty(l,"visibility") !== "none");
+    const main = mainL.length ? map.queryRenderedFeatures(box(3), {layers:mainL}) : [];
+    if (main.length){ openCanalPopup(e.lngLat, popupHTML(main[0].properties), main[0].properties); return; }
+    const minL = MINOR_LAYERS.filter(l => map.getLayer(l) && map.getLayoutProperty(l,"visibility") !== "none");
+    const oth = minL.length ? map.queryRenderedFeatures(box(5), {layers:minL}) : [];
+    if (oth.length){ openCanalPopup(e.lngLat, othersPopupHTML(oth[0].properties), oth[0].properties); return; }
+    closeInfo();
+  });
+  for (const id of ["canals-solid","canals-dash"]){
+    map.on("mousemove", id, e => {
+      if (measuring) return;
+      map.getCanvas().style.cursor = "pointer";
+      const f = e.features[0]; if (!f) return;
+      if (hoverId!==null) map.setFeatureState({source:"canals", id:hoverId, ...(isPM?{sourceLayer:SOURCE_LAYER}:{})}, {hover:false});
+      hoverId = f.id; map.setFeatureState({source:"canals", id:hoverId, ...(isPM?{sourceLayer:SOURCE_LAYER}:{})}, {hover:true});
+    });
+    map.on("mouseleave", id, () => {
+      if (measuring) return;
+      map.getCanvas().style.cursor = "";
+      if (hoverId!==null) map.setFeatureState({source:"canals", id:hoverId, ...(isPM?{sourceLayer:SOURCE_LAYER}:{})}, {hover:false});
+      hoverId = null;
+    });
+  }
+}
+
+// ---------------- controls ----------------
+const lenEl = document.getElementById("minlen"), lenVal = document.getElementById("lenval");
+lenEl.oninput = () => { filters.minlen = +lenEl.value; lenVal.textContent = lenEl.value + " km"; applyFilters(); };
+lenVal.textContent = "0 km";
+const BASINS_URL = "data/ibt_hydrobasins_lev05.geojson";
+let basinsOn = false, BASINS = null, basinsLoading = null, hlIds = [];
+const HL = "#ffd23f";
+async function loadBasins(){
+  if (BASINS) return true;
+  if (!basinsLoading) basinsLoading = getJSON(BASINS_URL).then(j => (BASINS = j)).catch(() => null);
+  return !!(await basinsLoading);
+}
+async function addBasins(){
+  if (!basinsOn && !hlIds.length) return;
+  if (!(await loadBasins())){ basinsOn=false; return; }
+  if (!map.getSource("basins")) map.addSource("basins", {type:"geojson", data:BASINS});
+  const before = map.getLayer("others-line") ? "others-line" : (map.getLayer("hover") ? "hover" : undefined);
+  if (!map.getLayer("basins-hl-fill")) map.addLayer({id:"basins-hl-fill", type:"fill", source:"basins", filter:["in",["get","id"],["literal",[]]],
+    paint:{"fill-color":HL, "fill-opacity":0.16}}, before);
+  if (!map.getLayer("basins-line")) map.addLayer({id:"basins-line", type:"line", source:"basins",
+    paint:{"line-color":"#ffffff", "line-opacity":["interpolate",["linear"],["zoom"],2,0.45,8,0.8], "line-width":["interpolate",["linear"],["zoom"],2,0.6,8,1.6]}}, before);
+  if (!map.getLayer("basins-hl-line")) map.addLayer({id:"basins-hl-line", type:"line", source:"basins", filter:["in",["get","id"],["literal",[]]],
+    paint:{"line-color":HL, "line-width":["interpolate",["linear"],["zoom"],2,1.4,8,2.6]}}, before);
+  map.setLayoutProperty("basins-line","visibility", basinsOn ? "visible" : "none");
+  const f = ["in",["get","id"],["literal",hlIds]];
+  map.setFilter("basins-hl-fill", f); map.setFilter("basins-hl-line", f);
+  updateBasinLabels();
+}
+// HydroBASINS id printed inside each highlighted basin (label point precomputed with polylabel)
+let basinMarkers = [];
+function updateBasinLabels(){
+  basinMarkers.forEach(m => m.remove()); basinMarkers = [];
+  if (!BASINS || !hlIds.length) return;
+  const want = new Set(hlIds);
+  for (const f of BASINS.features){
+    const q = f.properties; if (!want.has(q.id) || q.lx === undefined) continue;
+    const el = document.createElement("div"); el.className = "basin-label"; el.innerHTML = `<span class="bl-k">HydroBasin L5 ID:</span><br>${q.id}`;
+    el.title = `HydroBASINS level 5 id ${q.id} (${(q.km2||0).toLocaleString()} km²)`;
+    basinMarkers.push(new maplibregl.Marker({element: el}).setLngLat([q.lx, q.ly]).addTo(map));
+  }
+}
+function highlightBasins(bas){
+  hlIds = String(bas||"").split(",").filter(x=>x).map(Number);
+  if (hlIds.length) addBasins(); else { if (map.getLayer("basins-hl-fill")){ const f=["in",["get","id"],["literal",[]]]; map.setFilter("basins-hl-fill",f); map.setFilter("basins-hl-line",f); } updateBasinLabels(); }
+}
+function basRow(p){ const n = String(p.bas||"").split(",").filter(x=>x).length;
+  const fx = "";
+  return (n ? `${n} <span style="color:var(--muted)">(highlighted <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${HL};vertical-align:-1px"></span>)</span>` : `<span style="color:var(--muted)">none listed</span>`) + fx; }
+let currentPopup = null;
+// canal details: fixed panel on the right edge of the map, plus a marker at the clicked point
+let clickMarker = null;
+function openCanalPopup(lngLat, html, props){
+  document.getElementById("info-body").innerHTML = html;
+  document.getElementById("info").style.display = "block";
+  document.getElementById("info").scrollTop = 0;
+  if (!clickMarker){ const el=document.createElement("div"); el.className="click-dot"; clickMarker = new maplibregl.Marker({element:el}); }
+  clickMarker.setLngLat(lngLat).addTo(map);
+  currentPopup = props.id; highlightBasins(props.bas);
+  focusKey = (props.sys !== undefined && props.sys !== null && props.sys !== "") ? String(props.sys) : ((props.nets||"").split("|").filter(Boolean)[0] || null);
+  applyFocus();
+}
+function closeInfo(){ document.getElementById("info").style.display = "none"; if (clickMarker) clickMarker.remove(); currentPopup = null; highlightBasins(""); focusKey = null; applyFocus(); }
+// focus: keep the clicked canal's IBT system in colour, dim everything else
+let focusKey = null;
+const DIM = "#b9acd6";
+function applyFocus(){
+  if (!map.getLayer("canals-solid")) return;
+  const inSys = focusKey ? ["in", "|"+focusKey+"|", ["coalesce", ["get","nets"], ""]] : true;
+  const f = (on, off) => focusKey ? ["case", inSys, on, off] : on;
+  for (const id of ["canals-solid","canals-dash"]){
+    map.setPaintProperty(id, "line-color", f(colorExpr, DIM));
+    map.setPaintProperty(id, "line-opacity", f(1, 0.3));
+    map.setLayoutProperty(id, "line-sort-key", f(1, 0));
+  }
+  map.setPaintProperty("casing", "line-opacity", f(1, 0.15));
+  updateSel();
+  map.setLayoutProperty("casing", "line-sort-key", f(1, 0));
+  for (const ML of MINOR_LAYERS) if (map.getLayer(ML)){
+    const base = currentBase === "light" ? "#5f6b75" : "#ffffff";
+    const oc = planetStyle ? ["match", ["coalesce", ["get","lin"], ""], "lined", COL.lined, "unlined", COL.unlined, base] : base;
+    map.setPaintProperty(ML, "line-color", f(oc, DIM));
+    map.setPaintProperty(ML, "line-opacity", focusKey ? ["case", inSys, 0.95, 0.22] : (planetStyle ? ["interpolate",["linear"],["zoom"],3,0.6,9,0.9] : ["interpolate",["linear"],["zoom"],3,0.45,9,0.8]));
+    const W2 = ["min", ["coalesce", ["get","w"], 6], 90], hw = (a, d) => ["case", ["has","w"], a, d];
+    map.setPaintProperty(ML, "line-width", planetStyle
+      ? ["interpolate", ["exponential", 1.6], ["zoom"], 2, hw(["+", 0.5, ["/", W2, 40]], 0.35), 6, hw(["+", 1.0, ["/", W2, 14]], 0.6), 10, hw(["+", 1.5, ["/", W2, 5]], 1.2), 14, hw(["+", 2.0, ["/", W2, 1.6]], 2.2)]   // identical stops to the main canals (widthExpr)
+      : ["interpolate", ["exponential", 1.5], ["zoom"], 3, 0.4, 8, 0.8, 12, 1.5, 15, 2.5]);
+  }
+}
+
+document.getElementById("hide-canals").onchange = e => { canalsHidden = e.target.checked; setCanalVisibility(); };
+
+let currentBase = "google";
+document.querySelectorAll("#basemap button").forEach(btn => btn.onclick = () => {
+  if (btn.dataset.b === currentBase) return;
+  currentBase = btn.dataset.b;
+  document.querySelectorAll("#basemap button").forEach(b => b.classList.toggle("on", b===btn));
+  map.setStyle(basemapStyle(currentBase), {diff:false});
+  map.once("style.load", () => { addCanals(); addBasins(); addMeasureLayers(); });
+});
+
+// ---------------- measurement tool ----------------
+let measuring = false, mPts = [], mDone = false, mCursor = null;
+const R_EARTH = 6371008.8;
+function hav(a, b){ const r=Math.PI/180, dLat=(b[1]-a[1])*r, dLon=(b[0]-a[0])*r;
+  const h=Math.sin(dLat/2)**2+Math.cos(a[1]*r)*Math.cos(b[1]*r)*Math.sin(dLon/2)**2; return 2*R_EARTH*Math.asin(Math.sqrt(h)); }
+function fmtLen(m){ return m < 100 ? m.toFixed(1)+" m" : m < 1000 ? m.toFixed(0)+" m" : (m/1000).toFixed(m < 10000 ? 2 : 1)+" km"; }
+function measureData(){
+  const pts = (!mDone && mCursor && mPts.length) ? [...mPts, mCursor] : mPts;
+  return {type:"FeatureCollection", features:[
+    ...(pts.length>1 ? [{type:"Feature", properties:{}, geometry:{type:"LineString", coordinates:pts}}] : []),
+    ...mPts.map(c => ({type:"Feature", properties:{}, geometry:{type:"Point", coordinates:c}}))]};
+}
+function updateMeasure(){
+  const src = map.getSource("measure"); if (src) src.setData(measureData());
+  const pts = (!mDone && mCursor && mPts.length) ? [...mPts, mCursor] : mPts;
+  let tot = 0; for (let i=1;i<pts.length;i++) tot += hav(pts[i-1], pts[i]);
+  document.getElementById("m-total").textContent = fmtLen(tot);
+  document.getElementById("m-seg").textContent = pts.length > 2 ? `last segment ${fmtLen(hav(pts[pts.length-2], pts[pts.length-1]))} · ${pts.length-1} segments` : "";
+  document.getElementById("m-hint").style.display = mDone ? "none" : "block";
+}
+function addMeasureLayers(){
+  if (map.getSource("measure")) return;
+  map.addSource("measure", {type:"geojson", data:measureData()});
+  map.addLayer({id:"m-case", type:"line", source:"measure", filter:["==",["geometry-type"],"LineString"], paint:{"line-color":"#000","line-width":5,"line-opacity":0.5}});
+  map.addLayer({id:"m-line", type:"line", source:"measure", filter:["==",["geometry-type"],"LineString"], paint:{"line-color":"#ffe14d","line-width":2.5,"line-dasharray":[2,1]}});
+  map.addLayer({id:"m-pts", type:"circle", source:"measure", filter:["==",["geometry-type"],"Point"], paint:{"circle-radius":4.5,"circle-color":"#ffe14d","circle-stroke-color":"#000","circle-stroke-width":1.5}});
+}
+function setMeasuring(on){
+  measuring = on; mPts = []; mDone = false; mCursor = null;
+  document.getElementById("measure-box").style.display = on ? "block" : "none";
+  measureBtn.classList.toggle("on", on);
+  map.getCanvas().style.cursor = on ? "crosshair" : "";
+  if (on) map.doubleClickZoom.disable(); else map.doubleClickZoom.enable();
+  updateMeasure();
+}
+const measureBtn = document.getElementById("measure-btn");
+measureBtn.onclick = () => setMeasuring(!measuring);
+map.on("click", e => { if (!measuring) return; if (mDone){ mPts=[]; mDone=false; }
+  if (mPts.length){ const last = map.project(mPts[mPts.length-1]); if (Math.hypot(last.x-e.point.x, last.y-e.point.y) < 4) return; }
+  mPts.push([e.lngLat.lng, e.lngLat.lat]); updateMeasure(); });
+map.on("dblclick", e => { if (!measuring) return; e.preventDefault(); mDone = true; mCursor = null; updateMeasure(); });
+map.on("mousemove", e => { if (!measuring || mDone) return; mCursor = [e.lngLat.lng, e.lngLat.lat]; updateMeasure(); });
+document.addEventListener("keydown", e => { if (!measuring) return;
+  if (e.key === "Escape"){ setMeasuring(false); return; }
+  if (e.key === "Enter"){ mDone = true; mCursor=null; updateMeasure(); } });
+document.getElementById("m-new").onclick = () => { mPts=[]; mDone=false; mCursor=null; updateMeasure(); };
+document.getElementById("m-close").onclick = () => setMeasuring(false);
+
+// ---------------- stats charts ----------------
+// Hand-built SVG charts drawn from the canals currently shown (filters apply).
+const ST = {lined:COL.lined, unlined:COL.unlined};
+function esc(t){ return String(t ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function shownFeatures(){
+  return DATA.features.map(f => f.properties).filter(p => {
+    const lin=p.lin||"none", src=p.wsrc||"none";
+    return filters.lin.has(lin) && filters.src.has(src) && (p.len||0) >= filters.minlen; });
+}
+function niceMax(x){ if (x<=0) return 1; const e=Math.pow(10,Math.floor(Math.log10(x))), m=x/e;
+  return (m<=1?1:m<=2?2:m<=2.5?2.5:m<=5?5:10)*e; }
+function axStep(max, n){ return niceMax(max/n); }
+function axMax(x, n=4){ const s=axStep(x, n); return Math.max(s, Math.ceil(x/s - 1e-9)*s); }
+function ticks(max, n=5){ const step=axStep(max, n); const t=[]; for (let v=0; v<=max+1e-9; v+=step) t.push(+v.toFixed(6)); return t; }
+function nfmt(x, d=0){ return (x==null || Number.isNaN(x)) ? "–" : x.toLocaleString(undefined,{maximumFractionDigits:d}); }
+function quant(a, q){ if (!a.length) return NaN; const s=a, pos=(s.length-1)*q, b=Math.floor(pos);
+  return s[b+1]!==undefined ? s[b]+(pos-b)*(s[b+1]-s[b]) : s[b]; }
+function sorted(a){ return a.filter(x=>x!==undefined&&x!==null&&!isNaN(x)).sort((x,y)=>x-y); }
+function trunc(t, n){ return t.length>n ? t.slice(0,n-1)+"…" : t; }
+function cname(p){ return p.name_tr || p.name || (p.cn ? `Unnamed Canal connected to ${p.cn}` : "Unnamed Canal"); }
+function sname(p){ return p.sys_tr || p.sys_name || "Unnamed network"; }
+
+// horizontal bars: items [{label, value, tip}]
+function hbars(items, {W, unit="", d=0, color="var(--ink2)", labelW=200, max}){
+  const row=22, bar=12, top=6, axisH=22, H=top+items.length*row+axisH, x0=labelW, x1=W-56;
+  const M = max ?? axMax(Math.max(...items.map(i=>i.value)), 4);
+  const sx = v => x0 + (x1-x0)*v/M;
+  let g = `<svg class="ch" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for (const t of ticks(M,4)) g += `<line class="grid" x1="${sx(t)}" x2="${sx(t)}" y1="${top}" y2="${H-axisH}"/><text class="ax" x="${sx(t)}" y="${H-6}" text-anchor="middle">${nfmt(t)}${unit}</text>`;
+  items.forEach((it,i) => { const y=top+i*row, w=Math.max(1, sx(it.value)-x0), r=Math.min(4,w/2);
+    g += `<g class="hit" data-tip="${esc(it.tip)}"${it.act?` data-act="${esc(it.act)}" style="cursor:pointer"`:""}><rect x="0" y="${y}" width="${W}" height="${row}" fill="transparent"/>
+      <text class="lab" x="${x0-8}" y="${y+row/2+4}" text-anchor="end">${esc(trunc(it.label, Math.floor((labelW-12)/6.1)))}</text>
+      <path d="M${x0},${y+(row-bar)/2} h${w-r} a${r},${r} 0 0 1 ${r},${r} v${bar-2*r} a${r},${r} 0 0 1 -${r},${r} h-${w-r} z" fill="${color}"/>
+      <text class="val" x="${x0+w+6}" y="${y+row/2+4}">${nfmt(it.value,d)}${unit}</text></g>`; });
+  return g + `</svg>`;
+}
+// dot + range rows: items [{label, mid, lo, hi, tip}]
+function dotRange(items, {W, unit="", labelW=150, max}){
+  const row=20, top=6, axisH=22, H=top+items.length*row+axisH, x0=labelW, x1=W-20;
+  const M = max ?? axMax(Math.max(...items.map(i=>i.hi)), 5);
+  const sx = v => x0 + (x1-x0)*Math.min(v,M)/M;
+  let g = `<svg class="ch" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for (const t of ticks(M,5)) g += `<line class="grid" x1="${sx(t)}" x2="${sx(t)}" y1="${top}" y2="${H-axisH}"/><text class="ax" x="${sx(t)}" y="${H-6}" text-anchor="middle">${nfmt(t)}${unit}</text>`;
+  items.forEach((it,i) => { const y=top+i*row+row/2;
+    g += `<g class="hit" data-tip="${esc(it.tip)}"${it.act?` data-act="${esc(it.act)}" style="cursor:pointer"`:""}><rect x="0" y="${y-row/2}" width="${W}" height="${row}" fill="transparent"/>
+      <text class="lab" x="${x0-8}" y="${y+4}" text-anchor="end">${esc(it.label)}</text>
+      <line x1="${sx(it.lo)}" x2="${sx(it.hi)}" y1="${y}" y2="${y}" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="${sx(it.mid)}" cy="${y}" r="4.5" fill="var(--ink)" stroke="var(--bg)" stroke-width="2"/></g>`; });
+  return g + `</svg>`;
+}
+// line chart with crosshair; pts [{x, y, tip}] sorted by x
+let lineCharts = {};
+function lineChart(id, pts, {W, H=240, xLabel="", yLabel="", yMax, yUnit="", xLog=false}){
+  const L=48, R=14, T=10, B=36, xs=pts.map(p=>p.x);
+  const xmin = xLog ? Math.log10(Math.max(1,xs[0])) : xs[0], xmax = xLog ? Math.log10(xs[xs.length-1]) : xs[xs.length-1];
+  const M = yMax ?? axMax(Math.max(...pts.map(p=>p.y)), 4);
+  const sx = x => L + (W-L-R)*((xLog?Math.log10(Math.max(1,x)):x)-xmin)/((xmax-xmin)||1), sy = y => T + (H-T-B)*(1-y/M);
+  let g = `<svg class="ch" id="${id}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for (const t of ticks(M,4)) g += `<line class="grid" x1="${L}" x2="${W-R}" y1="${sy(t)}" y2="${sy(t)}"/><text class="ax" x="${L-6}" y="${sy(t)+4}" text-anchor="end">${nfmt(t)}${yUnit}</text>`;
+  const xt = xLog ? [1,10,100,1000,10000].filter(v=>v<=xs[xs.length-1]) : ticks(xs[xs.length-1],5).filter(v=>v>=xs[0]);
+  for (const t of xt) g += `<text class="ax" x="${sx(t)}" y="${H-B+16}" text-anchor="middle">${nfmt(t)}</text>`;
+  g += `<text class="ax" x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">${esc(xLabel)}</text>`;
+  g += `<text class="ax" transform="translate(11 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">${esc(yLabel)}</text>`;
+  const step = Math.max(1, Math.floor(pts.length/1500));
+  let d=""; pts.forEach((p,i)=>{ if (i%step===0 || i===pts.length-1) d += (d?"L":"M")+sx(p.x).toFixed(1)+","+sy(Math.min(p.y,M)).toFixed(1); });
+  g += `<path d="${d}" fill="none" stroke="var(--ink2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  g += `<line class="xh" x1="0" x2="0" y1="${T}" y2="${H-B}" style="display:none"/><circle class="xd" r="4.5" fill="var(--ink)" stroke="var(--bg)" stroke-width="2" style="display:none"/>`;
+  g += `<rect class="ov" x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/></svg>`;
+  lineCharts[id] = {pts, sx, sy, M, L, R, W};
+  return g;
+}
+function bindLineCharts(){
+  for (const [id, c] of Object.entries(lineCharts)){
+    const svg = document.getElementById(id); if (!svg) continue;
+    const xh=svg.querySelector(".xh"), xd=svg.querySelector(".xd");
+    svg.querySelector(".ov").addEventListener("mousemove", e => {
+      const r=svg.getBoundingClientRect(), mx=e.clientX-r.left;
+      let lo=0, hi=c.pts.length-1; while (hi-lo>1){ const m=(lo+hi)>>1; if (c.sx(c.pts[m].x) < mx) lo=m; else hi=m; }
+      const p = Math.abs(c.sx(c.pts[lo].x)-mx) < Math.abs(c.sx(c.pts[hi].x)-mx) ? c.pts[lo] : c.pts[hi];
+      const X=c.sx(p.x), Y=c.sy(Math.min(p.y,c.M));
+      xh.setAttribute("x1",X); xh.setAttribute("x2",X); xh.style.display=""; xd.setAttribute("cx",X); xd.setAttribute("cy",Y); xd.style.display="";
+      showTip(p.tip, e.clientX, e.clientY);
+    });
+    svg.querySelector(".ov").addEventListener("mouseleave", () => { xh.style.display="none"; xd.style.display="none"; hideTip(); });
+  }
+}
+// violins: groups [{name, color, vals (sorted)}]
+function violins(groups, {W, H=230, title, unit="", max, d=1}){
+  const L=44, R=10, T=26, B=34, M = max ?? axMax(Math.max(...groups.map(g=>g.vals[g.vals.length-1]||0)), 4);
+  const sy = v => T + (H-T-B)*(1-Math.min(v,M)/M), slot=(W-L-R)/groups.length, half=Math.min(slot*0.38, 46);
+  let g = `<svg class="ch" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><text class="ttl" x="${L}" y="14">${esc(title)}</text>`;
+  for (const t of ticks(M,4)) g += `<line class="grid" x1="${L}" x2="${W-R}" y1="${sy(t)}" y2="${sy(t)}"/><text class="ax" x="${L-6}" y="${sy(t)+4}" text-anchor="end">${nfmt(t)}${unit}</text>`;
+  groups.forEach((gr,i) => {
+    const cx = L + slot*(i+0.5), v = gr.vals.map(x=>Math.min(x,M)), n=v.length;
+    if (n < 3){ g += `<text class="ax" x="${cx}" y="${H/2}" text-anchor="middle">too few</text>`; return; }
+    const sd = Math.sqrt(v.reduce((a,x)=>a+(x-v.reduce((s,y)=>s+y,0)/n)**2,0)/n), iqr = quant(v,.75)-quant(v,.25);
+    const bw = Math.max(M/120, 0.9*Math.min(sd, (iqr||sd)/1.34)*Math.pow(n,-0.2));
+    const K=60, ys=[...Array(K+1)].map((_,k)=>M*k/K), dens=ys.map(y=>{ let s=0; for (const x of v){ const z=(y-x)/bw; if (Math.abs(z)<4) s+=Math.exp(-0.5*z*z); } return s; });
+    const dm = Math.max(...dens) || 1, lo=v[0], hi=v[n-1];
+    const pts = ys.map((y,k)=>[y,dens[k]/dm]).filter(([y])=>y>=lo-bw && y<=hi+bw);
+    const right = pts.map(([y,w])=>`${(cx+w*half).toFixed(1)},${sy(y).toFixed(1)}`), left = pts.slice().reverse().map(([y,w])=>`${(cx-w*half).toFixed(1)},${sy(y).toFixed(1)}`);
+    const q1=quant(v,.25), md=quant(v,.5), q3=quant(v,.75);
+    const tip = `${gr.name}: median ${nfmt(md,d)}${unit} (middle half ${nfmt(q1,d)}–${nfmt(q3,d)}${unit}) · ${nfmt(n)} canals`;
+    g += `<g class="hit" data-tip="${esc(tip)}"><rect x="${cx-slot/2}" y="${T}" width="${slot}" height="${H-T-B}" fill="transparent"/>
+      <polygon points="${right.concat(left).join(" ")}" fill="${gr.color}" fill-opacity="0.28" stroke="${gr.color}" stroke-width="1.5"/>
+      <rect x="${cx-3}" y="${sy(q3)}" width="6" height="${Math.max(1,sy(q1)-sy(q3))}" rx="3" fill="${gr.color}"/>
+      <circle cx="${cx}" cy="${sy(md)}" r="4.5" fill="var(--ink)" stroke="var(--bg)" stroke-width="2"/></g>
+      <text class="lab" x="${cx}" y="${H-B+16}" text-anchor="middle">${esc(gr.name)}</text>
+      <text class="ax" x="${cx}" y="${H-B+29}" text-anchor="middle">median ${nfmt(md,d)}${unit}</text>`;
+  });
+  return g + `</svg>`;
+}
+
+// scatter with log x: pts [{x, y, c, tip}]
+function scatter(pts, {W, H=320, xLabel="", yLabel="", fit=false, hex=false, fits=[]}){
+  const L=48, R=14, T=10, B=36, xs=pts.map(p=>p.x);
+  const lx0=Math.floor(Math.log10(Math.min(...xs))), lx1=Math.ceil(Math.log10(Math.max(...xs)));
+  const M = axMax(Math.max(...pts.map(p=>p.y)), 4);
+  const sx = x => L + (W-L-R)*(Math.log10(x)-lx0)/(lx1-lx0), sy = y => T + (H-T-B)*(1-Math.min(y,M)/M);
+  let g = `<svg class="ch" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for (const t of ticks(M,4)) g += `<line class="grid" x1="${L}" x2="${W-R}" y1="${sy(t)}" y2="${sy(t)}"/><text class="ax" x="${L-6}" y="${sy(t)+4}" text-anchor="end">${nfmt(t)}</text>`;
+  for (let e=lx0; e<=lx1; e++){ const v=10**e; g += `<line class="grid" x1="${sx(v)}" x2="${sx(v)}" y1="${T}" y2="${H-B}"/><text class="ax" x="${sx(v)}" y="${H-B+16}" text-anchor="middle">${nfmt(v)}</text>`; }
+  g += `<text class="ax" x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">${esc(xLabel)}</text><text class="ax" transform="translate(11 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">${esc(yLabel)}</text>`;
+  const order = pts.slice().sort((a,b)=> (a.c===COL.none) - (b.c===COL.none) || (a.c===COL.lined) - (b.c===COL.lined));
+  let fitSvg = "";
+  if (fit && pts.length > 2){
+    const X = pts.map(p=>Math.log10(p.x)), Y = pts.map(p=>p.y), n = X.length;
+    const mx = X.reduce((a,b)=>a+b,0)/n, my = Y.reduce((a,b)=>a+b,0)/n;
+    let sxy=0, sxx=0, syy=0; for (let i=0;i<n;i++){ sxy+=(X[i]-mx)*(Y[i]-my); sxx+=(X[i]-mx)**2; syy+=(Y[i]-my)**2; }
+    const b1 = sxy/sxx, b0 = my - b1*mx, r2 = (sxy*sxy)/(sxx*syy);
+    const x0 = Math.min(...pts.map(p=>p.x)), x1 = Math.max(...pts.map(p=>p.x));
+    const eq = `Width = ${b0<0?"−":""}${Math.abs(b0).toFixed(1)} ${b1<0?"−":"+"} ${Math.abs(b1).toFixed(1)} × log₁₀(Length)   ·   R² = ${r2.toFixed(2)}   ·   n = ${nfmt(n)}`;
+    fitSvg = `<line x1="${sx(x0)}" y1="${sy(b0+b1*Math.log10(x0))}" x2="${sx(x1)}" y2="${sy(b0+b1*Math.log10(x1))}" stroke="var(--ink)" stroke-width="2" stroke-dasharray="6 4" stroke-linecap="round"/>`;
+  }
+  if (hex){
+    const r = 8, dx = Math.sqrt(3)*r, dy = 1.5*r, bins = new Map();
+    for (const p of pts){
+      const px = sx(p.x), py = sy(p.y);
+      let j = Math.round(py/dy), i = Math.round(px/dx - (j&1)/2);
+      // check the neighbouring row for the closer hex centre
+      const cx = (i + (j&1)/2)*dx, cy = j*dy, j2 = py > cy ? j+1 : j-1, i2 = Math.round(px/dx - (j2&1)/2);
+      const cx2 = (i2 + (j2&1)/2)*dx, cy2 = j2*dy;
+      if ((px-cx2)**2 + (py-cy2)**2 < (px-cx)**2 + (py-cy)**2){ i = i2; j = j2; }
+      const k = i+","+j; let b = bins.get(k); if (!b){ b = {cx:(i+(j&1)/2)*dx, cy:j*dy, n:0, xs:[], ys:[]}; bins.set(k,b); }
+      b.n++; b.xs.push(p.x); b.ys.push(p.y);
+    }
+    const maxN = Math.max(...[...bins.values()].map(b=>b.n)), lm = Math.log(maxN+1);
+    const corners = [...Array(6)].map((_,a)=>{ const t=Math.PI/180*(60*a-30); return [r*Math.cos(t), r*Math.sin(t)]; });
+    let hg = `<g clip-path="url(#hexclip)">`;
+    for (const b of bins.values()){
+      const t = Math.log(b.n+1)/lm, op = (0.18 + 0.82*t).toFixed(2);
+      const xs=b.xs.sort((a,c)=>a-c), ys=b.ys.sort((a,c)=>a-c);
+      const tip = `<b>${nfmt(b.n)} canal${b.n==1?"":"s"}</b><br>length ${nfmt(xs[0],0)}–${nfmt(xs[xs.length-1],0)} km<br>width ${nfmt(ys[0],0)}–${nfmt(ys[ys.length-1],0)} m`;
+      hg += `<path class="hit" data-tip="${esc(tip)}" d="M${corners.map(([x,y])=>(b.cx+x*0.96).toFixed(1)+","+(b.cy+y*0.96).toFixed(1)).join("L")}Z" fill="${HEXC}" fill-opacity="${op}"/>`;
+    }
+    hg += `</g>`;
+    g += `<defs><clipPath id="hexclip"><rect x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}"/></clipPath></defs>` + hg;
+    // legend: colour scale
+    const lw = 140, lx = W-R-lw-4, ly = T+6;
+    g += `<defs><linearGradient id="hexgrad"><stop offset="0" stop-color="${HEXC}" stop-opacity="0.18"/><stop offset="1" stop-color="${HEXC}" stop-opacity="1"/></linearGradient></defs>
+      <rect x="${lx-8}" y="${ly-4}" width="${lw+16}" height="34" rx="5" fill="var(--bg)" fill-opacity="0.85" stroke="var(--line)"/>
+      <rect x="${lx}" y="${ly}" width="${lw}" height="8" rx="2" fill="url(#hexgrad)"/>
+      <text class="ax" x="${lx}" y="${ly+22}">1</text><text class="ax" x="${lx+lw}" y="${ly+22}" text-anchor="end">${nfmt(maxN)} canals</text>`;
+    return g + fitSvg + `</svg>`;
+  }
+  for (const fg of fits){ const P=fg.pts; if (P.length<3) continue;
+    const X=P.map(p=>Math.log10(p.x)), Y=P.map(p=>p.y), n=X.length, mx=X.reduce((a,b)=>a+b,0)/n, my=Y.reduce((a,b)=>a+b,0)/n;
+    let sxy=0,sxx=0; for (let i=0;i<n;i++){ sxy+=(X[i]-mx)*(Y[i]-my); sxx+=(X[i]-mx)**2; }
+    const b1=sxy/sxx, b0=my-b1*mx, x0=Math.min(...P.map(p=>p.x)), x1=Math.max(...P.map(p=>p.x));
+    const ln=`x1="${sx(x0)}" y1="${sy(b0+b1*Math.log10(x0))}" x2="${sx(x1)}" y2="${sy(b0+b1*Math.log10(x1))}"`;
+    fitSvg += `<line ${ln} stroke="var(--bg)" stroke-width="5" stroke-linecap="round"/><line ${ln} stroke="${fg.color}" stroke-width="2.4" stroke-dasharray="7 4" stroke-linecap="round"/>`; }
+  for (const p of order) g += `<circle class="hit" data-tip="${esc(p.tip)}"${p.act?` data-act="${esc(p.act)}" style="cursor:pointer"`:""} cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="3.2" fill="${p.c}" fill-opacity="0.75" stroke="var(--bg)" stroke-width="0.8"/>`;
+  return g + fitSvg + `</svg>`;
+}
+const HEXC = "#F2C84B";
+// two overlapping hexbin layers on log-x axes, one per group; groups [{name,color,pts:[{x,y}]}]
+function hexDual(groups, {W, H=360, xLabel="", yLabel=""}){
+  const L=48, R=14, T=10, B=36, all=groups.flatMap(g=>g.pts), xs=all.map(p=>p.x);
+  const lx0=Math.floor(Math.log10(Math.min(...xs))), lx1=Math.ceil(Math.log10(Math.max(...xs)));
+  const M = axMax(Math.max(...all.map(p=>p.y)), 4);
+  const sx = x => L + (W-L-R)*(Math.log10(x)-lx0)/(lx1-lx0), sy = y => T + (H-T-B)*(1-Math.min(y,M)/M);
+  let g = `<svg class="ch" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for (const t of ticks(M,4)) g += `<line class="grid" x1="${L}" x2="${W-R}" y1="${sy(t)}" y2="${sy(t)}"/><text class="ax" x="${L-6}" y="${sy(t)+4}" text-anchor="end">${nfmt(t)}</text>`;
+  for (let e=lx0; e<=lx1; e++){ const v=10**e; g += `<line class="grid" x1="${sx(v)}" x2="${sx(v)}" y1="${T}" y2="${H-B}"/><text class="ax" x="${sx(v)}" y="${H-B+16}" text-anchor="middle">${nfmt(v)}</text>`; }
+  g += `<text class="ax" x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">${esc(xLabel)}</text><text class="ax" transform="translate(11 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">${esc(yLabel)}</text>`;
+  const r=8, dx=Math.sqrt(3)*r, dy=1.5*r;
+  const cell = (px,py) => { let j=Math.round(py/dy), i=Math.round(px/dx-(j&1)/2);
+    const cx=(i+(j&1)/2)*dx, cy=j*dy, j2=py>cy?j+1:j-1, i2=Math.round(px/dx-(j2&1)/2), cx2=(i2+(j2&1)/2)*dx, cy2=j2*dy;
+    if ((px-cx2)**2+(py-cy2)**2 < (px-cx)**2+(py-cy)**2){ i=i2; j=j2; } return [i,j]; };
+  const bins = new Map();
+  groups.forEach((gr,gi) => { for (const p of gr.pts){ const [i,j]=cell(sx(p.x),sy(p.y)), k=i+","+j;
+    let b=bins.get(k); if(!b){ b={cx:(i+(j&1)/2)*dx, cy:j*dy, n:groups.map(()=>0)}; bins.set(k,b); } b.n[gi]++; } });
+  const corners=[...Array(6)].map((_,a)=>{ const t=Math.PI/180*(60*a-30); return [r*Math.cos(t)*0.96, r*Math.sin(t)*0.96]; });
+  const hexd = b => "M"+corners.map(([x,y])=>(b.cx+x).toFixed(1)+","+(b.cy+y).toFixed(1)).join("L")+"Z";
+  const maxN = groups.map((_,gi)=>Math.max(1,...[...bins.values()].map(b=>b.n[gi])));
+  g += `<defs><clipPath id="hexclip2"><rect x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}"/></clipPath></defs><g clip-path="url(#hexclip2)">`;
+  groups.forEach((gr,gi) => { for (const b of bins.values()) if (b.n[gi]) {
+    const t=Math.log(b.n[gi]+1)/Math.log(maxN[gi]+1);
+    g += gr.outline
+      ? `<path d="${hexd(b)}" transform="translate(${b.cx} ${b.cy}) scale(0.8) translate(${-b.cx} ${-b.cy})" fill="none" stroke="${gr.color}" stroke-width="1.8" stroke-opacity="${(0.25+0.75*t).toFixed(2)}"/>`
+      : `<path d="${hexd(b)}" fill="${gr.color}" fill-opacity="${(0.12+0.78*t).toFixed(2)}"/>`; } });
+  for (const b of bins.values()){
+    const tip = groups.map((gr,gi)=>`${gr.name}: <b>${nfmt(b.n[gi])}</b>`).join("<br>");
+    g += `<path class="hit" data-tip="${esc(tip)}" d="${hexd(b)}" fill="transparent"/>`; }
+  g += `</g>`;
+  // one dashed fit line per group (width vs log10 length)
+  groups.forEach(gr => { const P=gr.pts; if (P.length<3) return;
+    const X=P.map(p=>Math.log10(p.x)), Y=P.map(p=>p.y), n=X.length, mx=X.reduce((a,b)=>a+b,0)/n, my=Y.reduce((a,b)=>a+b,0)/n;
+    let sxy=0,sxx=0; for (let i=0;i<n;i++){ sxy+=(X[i]-mx)*(Y[i]-my); sxx+=(X[i]-mx)**2; }
+    const b1=sxy/sxx, b0=my-b1*mx, x0=Math.min(...P.map(p=>p.x)), x1=Math.max(...P.map(p=>p.x));
+    const ln = `x1="${sx(x0)}" y1="${sy(b0+b1*Math.log10(x0))}" x2="${sx(x1)}" y2="${sy(b0+b1*Math.log10(x1))}"`;
+    g += `<line ${ln} stroke="var(--bg)" stroke-width="4.5" stroke-linecap="round"/><line ${ln} stroke="${gr.color}" stroke-width="2.2" stroke-dasharray="7 4" stroke-linecap="round"/>`; });
+  return g + `</svg>`;
+}
+const tipEl = () => document.getElementById("ctip");
+function showTip(html, x, y){ const t=tipEl(); t.innerHTML=html; t.style.display="block";
+  const w=t.offsetWidth, h=t.offsetHeight; t.style.left=Math.min(x+14, innerWidth-w-8)+"px"; t.style.top=Math.max(8, y-h-10)+"px"; }
+function hideTip(){ tipEl().style.display="none"; }
+
+function sec(title, note, body){ return `<section class="cs"><h4>${title}</h4>${body}</section>`; }   // notes under chart titles are hidden (kept in the calls for reference)
+
+function widthStats(P, W){
+  const ws = P.filter(p=>p.w!==undefined).sort((a,b)=>b.w-a.w);
+  if (!ws.length) return "<p>No canals with a width under the current filters.</p>";
+  const pts = ws.map((p,i)=>({x:i+1, y:p.w, tip:`<b>${esc(cname(p))}</b> (${p.cc})<br>#${nfmt(i+1)} · ${nfmt(p.w,1)} m`}));
+  const med = quant(sorted(ws.map(p=>p.w)),.5);
+  let h = "";
+  const top = ws.slice(0,50).map(p=>({act:'canal:'+p.id, label:`${p.cc} · ${cname(p)}`, value:p.w, tip:`<b>${esc(cname(p))}</b> (${p.cc})<br>${nfmt(p.w,1)} m · ${nfmt(p.len,1)} km long<br>${esc(sname(p))}`}));
+  h += sec("Widest 50 main canals", "", hbars(top, {W, unit:" m", d:1, labelW:Math.min(260, W*0.4)}));
+  const by = {}; for (const p of ws) (by[p.cc] ||= []).push(p.w);
+  const rows = Object.entries(by).filter(([,a])=>a.length>=20).map(([cc,a])=>{ a=sorted(a); return {cc, n:a.length, mid:quant(a,.5), lo:quant(a,.25), hi:quant(a,.75)}; })
+    .sort((a,b)=>b.mid-a.mid).map(r=>({act:'cc:'+r.cc, label:`${r.cc} (${r.n})`, mid:r.mid, lo:r.lo, hi:r.hi, tip:`<b>${r.cc}</b> · ${r.n} canals<br>median ${nfmt(r.mid,1)} m<br>middle half ${nfmt(r.lo,1)}–${nfmt(r.hi,1)} m`}));
+  if (rows.length) h += sec("Predicted width by country", "Dot = median, line = middle half of canals (25th–75th percentile); number of canals in brackets.", dotRange(rows, {W, unit:" m", labelW:90}));
+  return h;
+}
+
+function lengthStats(P, W){
+  const nets = {}; for (const p of P){ if (p.sys===undefined) continue; const n = (nets[p.sys] ||= {p, km:p.sys_km||0, nMain:0, mainKm:0}); n.nMain++; n.mainKm += p.len||0; }
+  const arr = Object.values(nets).sort((a,b)=>b.km-a.km), total = arr.reduce((s,n)=>s+n.km,0);
+  if (!arr.length) return "<p>No networks under the current filters.</p>";
+  const top = arr.slice(0,30).map(n=>({act:'net:'+n.p.sys, label:`${n.p.cc} · ${sname(n.p)}`, value:n.km,
+    tip:`<b>${esc(sname(n.p))}</b> (${n.p.cc})<br>Network length ${nfmt(n.km)} km<br>${n.nMain} main canal${n.nMain==1?"":"s"} (${nfmt(n.mainKm)} km)`}));
+  let h = sec("Top 30 IBT networks by total network length",
+    "Total length of every IBT canal in the network, including the smaller canals.",
+    hbars(top, {W, unit:" km", labelW:Math.min(280, W*0.42)}));
+  const lc = P.filter(p=>p.len>0).sort((a,b)=>b.len-a.len).slice(0,50).map(p=>({act:'canal:'+p.id, label:`${p.cc} · ${cname(p)}`, value:p.len,
+    tip:`<b>${esc(cname(p))}</b> (${p.cc})<br>${nfmt(p.len,1)} km${p.w!==undefined?` · ${nfmt(p.w,1)} m wide`:""}<br>${esc(sname(p))}`}));
+  h += sec("Top 50 individual canals by length", "Length of each main canal on its own (not its whole network).",
+    hbars(lc, {W, unit:" km", d:0, labelW:Math.min(280, W*0.42)}));
+  const SP = P.filter(p=>p.w!==undefined && p.len>0);
+  h += sec("Canal length vs predicted width",
+    "Coloured by lining. Length on a log scale. Dashed lines = best fit for lined and unlined canals.",
+    `<div class="clg"><span><i style="background:${COL.lined}"></i>Lined</span><span><i style="background:${COL.unlined}"></i>Unlined</span><span><i style="background:${COL.none}"></i>No lining estimate</span></div>` +
+    scatter(SP.map(p=>({act:'canal:'+p.id, x:p.len, y:p.w, c:COL[p.lin||"none"], tip:`<b>${esc(cname(p))}</b> (${p.cc})<br>${nfmt(p.len,1)} km · ${nfmt(p.w,1)} m · ${p.lin||"no lining estimate"}`})),
+      {W, H:340, xLabel:"Canal length (km, log scale)", yLabel:"Predicted width (m)",
+       fits:["unlined","lined"].map(l=>({color:COL[l], pts:SP.filter(p=>p.lin===l).map(p=>({x:p.len, y:p.w}))}))}));
+  const byc = {}; for (const p of P) byc[p.cc] = (byc[p.cc]||0) + (p.len||0);
+  const nc = {}; for (const n of arr) nc[n.p.cc] = (nc[n.p.cc]||0)+1;
+  const rows = Object.entries(byc).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([cc,km])=>({act:'cc:'+cc, label:cc, value:km, tip:`<b>${cc}</b><br>${nfmt(km)} km of main canals<br>${nc[cc]||0} networks`}));
+  h += sec("Main-canal length by country (top 20)", "", hbars(rows, {W, unit:" km", labelW:60}));
+  return h;
+}
+
+function liningStats(P, W){
+  const E = P.filter(p => p.lsrc==="esri" && (p.lin==="lined" || p.lin==="unlined"));
+  if (E.length < 10) return "<p>Too few canals with Esri lining under the current filters.</p>";
+  const grp = k => ["lined","unlined"].map(l => ({name: l==="lined"?"Lined":"Unlined", color:ST[l], vals: sorted(E.filter(p=>p.lin===l).map(p=>p[k]))}));
+  const nL = E.filter(p=>p.lin==="lined").length;
+  const legend = `<div class="clg"><span><i style="background:${ST.lined}"></i>Lined (${nfmt(nL)})</span><span><i style="background:${ST.unlined}"></i>Unlined (${nfmt(E.length-nL)})</span></div>`;
+  const vw = W >= 640 ? Math.floor((W-12)/2) : W;
+  let grid = `<div class="vgrid">` +
+    violins(grp("w"),  {W:vw, title:"Predicted width (m)", unit:" m", max:80}) +
+    violins(grp("vd"), {W:vw, title:"Distance from bank to nearest vegetation (m)", unit:" m", max:30}) +
+    violins(grp("rg"), {W:vw, title:"Water-edge roughness (m)", unit:" m", max:3, d:2}) +
+    violins(grp("wv"), {W:vw, title:"Width variation along the canal (IQR ÷ median)", max:3, d:2}) + `</div>`;
+  let h = sec("Lined vs unlined canals", "",
+    legend + grid);
+  const by = {}; for (const p of E){ const b=(by[p.cc] ||= {n:0, l:0}); b.n++; if (p.lin==="lined") b.l++; }
+  const rows = Object.entries(by).filter(([,b])=>b.n>=20).map(([cc,b])=>({cc, n:b.n, s:100*b.l/b.n})).sort((a,b)=>b.s-a.s)
+    .map(r=>({label:`${r.cc} (${r.n})`, value:r.s, tip:`<b>${r.cc}</b><br>${nfmt(r.s,0)}% lined of ${r.n} canals`}));
+  if (rows.length) h += sec("Share of main canals that are lined, by country", "Number of canals in brackets.", hbars(rows, {W, unit:"%", labelW:90, max:100, color:ST.lined}));
+  return h;
+}
+
+// ---- count: IBT networks per country (choropleth) ----
+let COUNTRIES = null, countriesLoading = false;
+const COUNTRIES_URL = new URL("data/ibt_country_counts.geojson", location.href).href;
+function natEarth([lon, lat]){   // Natural Earth I projection (radians in, unit plane out)
+  const l=lon*Math.PI/180, p=lat*Math.PI/180, p2=p*p, p4=p2*p2, p6=p4*p2, p8=p4*p4, p10=p8*p2, p12=p6*p6;
+  return [l*(0.8707-0.131979*p2-0.013791*p4+0.003971*p10-0.001529*p12), p*(1.007226+0.015085*p2-0.044475*p6+0.028874*p8-0.005916*p10)];
+}
+const CNT_BREAKS = [1, 2, 6, 21, 51, 201], CNT_LABELS = ["1", "2–5", "6–20", "21–50", "51–200", "201+"];
+const SEQ_LIGHT = ["#b7d3f6","#86b6ef","#5598e7","#2a78d6","#1c5cab","#104281"], SEQ_DARK = ["#104281","#1c5cab","#2a78d6","#5598e7","#86b6ef","#cde2fb"];
+function cntClass(n){ let k=-1; for (let i=0;i<CNT_BREAKS.length;i++) if (n>=CNT_BREAKS[i]) k=i; return k; }
+function countStats(P, W){
+  if (!COUNTRIES){
+    if (!countriesLoading){ countriesLoading = true; loadCountries().then(()=>{ if (document.getElementById("cmodal").style.display==="flex") openStats("count"); }); }
+    return "<p>Loading country outlines…</p>";
+  }
+  const seq = document.body.classList.contains("dark") ? SEQ_DARK : SEQ_LIGHT;
+  const mainNets = {}; for (const p of P) if (p.sys!==undefined) (mainNets[p.cc] ||= new Set()).add(p.sys);
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; const proj=[];
+  for (const f of COUNTRIES.features){ const g=f.geometry, polys = g.type==="Polygon" ? [g.coordinates] : g.coordinates;
+    const pp = polys.map(poly=>poly.map(ring=>ring.map(c=>{ const q=natEarth(c); if(q[0]<x0)x0=q[0]; if(q[0]>x1)x1=q[0]; if(q[1]<y0)y0=q[1]; if(q[1]>y1)y1=q[1]; return q; })));
+    proj.push([f.properties, pp]); }
+  const H = Math.round(W*(y1-y0)/(x1-x0)), sc = W/(x1-x0);
+  const P2 = q => ((q[0]-x0)*sc).toFixed(1)+","+((y1-q[1])*sc).toFixed(1);
+  let g = `<svg class="ch" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for (const [p, pp] of proj){
+    const d = pp.map(poly=>poly.map(r=>"M"+r.map(P2).join("L")+"Z").join("")).join("");
+    const k = p.n ? cntClass(p.n) : -1, fill = k>=0 ? seq[k] : "var(--chip)";
+    const m = mainNets[p.id] ? mainNets[p.id].size : 0;
+    const tip = p.n ? `<b>${esc(p.nm)}</b> (${p.id})<br>${nfmt(p.n)} IBT network${p.n==1?"":"s"}<br>${nfmt(m)} with canals at least 20 km<br>${nfmt(p.c)} canals · ${nfmt(p.km)} km` : `<b>${esc(p.nm)}</b><br>No IBTs in the dataset`;
+    g += `<g class="hit" data-tip="${esc(tip)}"${p.n && m ? ` data-act="cc:${p.id}" style="cursor:pointer"` : ""}><path d="${d}" fill="${fill}" stroke="var(--bg)" stroke-width="0.6" stroke-linejoin="round"/></g>`;
+  }
+  g += `</svg>`;
+  const legend = `<div class="clg">` + CNT_LABELS.map((l,i)=>`<span><i style="background:${seq[i]}"></i>${l}</span>`).join("") + `<span><i style="background:var(--chip);outline:1px solid var(--line)"></i>No IBTs</span></div>`;
+  const all = COUNTRIES.features.map(f=>f.properties).filter(p=>p.n).sort((a,b)=>b.n-a.n);
+  const tot = all.reduce((s,p)=>s+p.n,0);
+  let h = sec("IBT networks per country", "A network crossing a border is counted in each country.", legend + g);
+  const rows = all.slice(0,25).map(p=>({act:(mainNets[p.id]?'cc:'+p.id:undefined), label:p.nm, value:p.n,
+    tip:`<b>${esc(p.nm)}</b> (${p.id})<br>${nfmt(p.n)} IBT networks<br>${nfmt(mainNets[p.id]?mainNets[p.id].size:0)} with canals at least 20 km<br>${nfmt(p.c)} canals · ${nfmt(p.km)} km`}));
+  h += sec("Countries with the most IBT networks (top 25)", "", hbars(rows, {W, labelW:Math.min(170, W*0.3), color:seq[3]}));
+  return h;
+}
+
+// ---- training & validation (cross-validated predictions vs ground truth) ----
+let VAL = null, valLoading = false;
+const VAL_URL = new URL("data/ibt_validation.json", location.href).href;
+let countriesP = null;
+function loadCountries(){ return countriesP ||= getJSON(COUNTRIES_URL).then(d=>{ COUNTRIES=d; }); }
+function worldFrame(W){
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; const proj=[];
+  for (const f of COUNTRIES.features){ const g=f.geometry, polys = g.type==="Polygon" ? [g.coordinates] : g.coordinates;
+    proj.push([f.properties, polys.map(poly=>poly.map(ring=>ring.map(c=>{ const q=natEarth(c); if(q[0]<x0)x0=q[0]; if(q[0]>x1)x1=q[0]; if(q[1]<y0)y0=q[1]; if(q[1]>y1)y1=q[1]; return q; })))]); }
+  const sc = W/(x1-x0), H = Math.round((y1-y0)*sc);
+  const xy = c => { const q=natEarth(c); return [(q[0]-x0)*sc, (y1-q[1])*sc]; };
+  const P2 = q => ((q[0]-x0)*sc).toFixed(1)+","+((y1-q[1])*sc).toFixed(1);
+  return {H, xy, proj, path: pp => pp.map(poly=>poly.map(r=>"M"+r.map(P2).join("L")+"Z").join("")).join("")};
+}
+// grouped horizontal bars: groups [{label, vals:[...], tips:[...]}], series [{name,color}]
+function gbars(groups, series, {W, unit="", d=0, labelW=110, max}){
+  const bar=10, gap=2, grp=series.length*(bar+gap)+12, top=6, axisH=22, H=top+groups.length*grp+axisH, x0=labelW, x1=W-56;
+  const M = max ?? axMax(Math.max(...groups.flatMap(g=>g.vals.filter(v=>v!=null))), 4);
+  const sx = v => x0 + (x1-x0)*Math.min(v,M)/M;
+  let g = `<svg class="ch" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for (const t of ticks(M,4)) g += `<line class="grid" x1="${sx(t)}" x2="${sx(t)}" y1="${top}" y2="${H-axisH}"/><text class="ax" x="${sx(t)}" y="${H-6}" text-anchor="middle">${nfmt(t)}${unit}</text>`;
+  groups.forEach((gr,i) => { const y0=top+i*grp+6;
+    g += `<text class="lab" x="${x0-8}" y="${y0+(series.length*(bar+gap))/2+3}" text-anchor="end">${esc(gr.label)}</text>`;
+    series.forEach((s,j) => { const v=gr.vals[j]; if (v==null) return; const y=y0+j*(bar+gap), w=Math.max(1,sx(v)-x0), r=Math.min(4,w/2);
+      g += `<g class="hit" data-tip="${esc(gr.tips[j])}"><rect x="${x0}" y="${y-1}" width="${x1-x0+40}" height="${bar+2}" fill="transparent"/>
+        <path d="M${x0},${y} h${w-r} a${r},${r} 0 0 1 ${r},${r} v${bar-2*r} a${r},${r} 0 0 1 -${r},${r} h-${w-r} z" fill="${s.color}"/>
+        <text class="val" x="${x0+w+6}" y="${y+bar-1}">${nfmt(v,d)}${unit}</text></g>`; }); });
+  return g + `</svg>`;
+}
+// line chart over ordered categories: groups [{label, vals:[...], tips:[...]}], series [{name,color}]
+function catLines(groups, series, {W, H=260, unit="", xLabel="", yLabel=""}){
+  const L=52, R=24, T=14, B=44, n=groups.length;
+  const M = axMax(Math.max(...groups.flatMap(g=>g.vals.filter(v=>v!=null))), 4);
+  const pad = 40, sx = i => L + pad + (W-L-R-2*pad)*(n===1 ? 0.5 : i/(n-1)), sy = v => T + (H-T-B)*(1-v/M);
+  let g = `<svg class="ch" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for (const t of ticks(M,4)) g += `<line class="grid" x1="${L}" x2="${W-R}" y1="${sy(t)}" y2="${sy(t)}"/><text class="ax" x="${L-6}" y="${sy(t)+4}" text-anchor="end">${nfmt(t)}${unit}</text>`;
+  groups.forEach((gr,i) => { g += `<text class="ax" x="${sx(i)}" y="${H-B+16}" text-anchor="middle">${esc(gr.label.replace(/ boxes$/,""))}</text>`; });
+  g += `<text class="ax" x="${(L+W-R)/2}" y="${H-6}" text-anchor="middle">${esc(xLabel)}</text>`;
+  g += `<text class="ax" transform="translate(11 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">${esc(yLabel)}</text>`;
+  series.forEach((s,j) => {
+    const P = groups.map((gr,i)=>{ const v=gr.vals[j]; if (v==null) return null; const top = gr.vals.every(o=>o==null || o<=v); return [sx(i), sy(v), v, gr.tips[j], top ? -10 : 18]; }).filter(Boolean);
+    g += `<path d="M${P.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join("L")}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    for (const p of P) g += `<g class="hit" data-tip="${esc(p[3])}"><circle cx="${p[0]}" cy="${p[1]}" r="10" fill="transparent"/><circle cx="${p[0]}" cy="${p[1]}" r="4.5" fill="${s.color}" stroke="var(--bg)" stroke-width="2"/>
+      <text class="val" x="${p[0]}" y="${p[1]+p[4]}" text-anchor="middle">${nfmt(p[2],1)}${unit}</text></g>`;
+  });
+  return g + `</svg>`;
+}
+function validationStats(P, W){
+  if (!VAL || !COUNTRIES){
+    if (!valLoading){ valLoading = true; Promise.all([getJSON(VAL_URL).then(d=>{ VAL=d; }), loadCountries()])
+      .then(()=>{ if (document.getElementById("cmodal").style.display==="flex") openStats("validation"); }); }
+    return "<p>Loading training data…</p>";
+  }
+  const pts = VAL.pts.map(a=>({lon:a[0],lat:a[1],gt:a[2],e:a[3],p:a[4],c:a[5],cc:a[6],rg:a[7],ne:a[8],np:a[9],lin:a[10]}));
+  const S = [{k:"e",name:"Esri",color:DOT.esri},{k:"p",name:"Planet",color:DOT.planet},{k:"c",name:"Esri + Planet",color:"var(--ink)"}];
+  const ape = (q,k) => Math.abs(q[k]-q.gt)/q.gt;
+  const medAPE = (A,k) => { const a=A.filter(q=>q[k]!=null).map(q=>ape(q,k)); return a.length ? 100*quant(sorted(a),.5) : null; };
+  const w25 = (A,k) => { const a=A.filter(q=>q[k]!=null); return a.length ? 100*a.filter(q=>ape(q,k)<=0.25).length/a.length : null; };
+  const nCC = new Set(pts.map(q=>q.cc)).size, la = VAL.lin.esri;
+  const legend = (items) => `<div class="clg">` + items.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join("") + `</div>`;
+  const tile = (v, l) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
+  let h = `<div class="stats" style="grid-template-columns:repeat(${W>=640?4:2},1fr);margin:0 0 16px">` +
+    tile(nfmt(pts.length), `ground-truth widths on ${nfmt(VAL.n_canals)} canals in ${nCC} countries`) +
+    tile(nfmt(medAPE(pts,"c"),1)+"%", "median width error (Esri + Planet model)") +
+    tile(nfmt(w25(pts,"c"),0)+"%", "of canals within ±25% of the measured width") +
+    tile(nfmt(la.auc,2), `lining AUC (Esri model, ${nfmt(VAL.n_lin)} labelled canals)`) + `</div>`;
+
+  // 1. where the training canals are
+  const wf = worldFrame(W);
+  let g = `<svg class="ch" width="${W}" height="${wf.H}" viewBox="0 0 ${W} ${wf.H}">`;
+  for (const [p, pp] of wf.proj) g += `<path d="${wf.path(pp)}" fill="var(--chip)" stroke="var(--bg)" stroke-width="0.6"/>`;
+  const LC = {1:COL.lined, 0:COL.unlined, "-1":COL.none}, LN = {1:"lined", 0:"unlined", "-1":"no lining label"};
+  for (const q of pts){ const [x,y]=wf.xy([q.lon,q.lat]);
+    g += `<g class="hit" data-tip="${esc(`<b>${q.cc}</b> · ${q.rg}<br>Measured width ${nfmt(q.gt,1)} m<br>Esri + Planet model ${q.c!=null?nfmt(q.c,1)+" m":"–"}<br>Lining label: ${LN[q.lin]}`)}"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="transparent"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${LC[q.lin]}" stroke="var(--bg)" stroke-width="1"/></g>`; }
+  g += `</svg>`;
+  h += sec("Where the training canals are", "Each dot is a canal width measured by hand on high-resolution imagery, coloured by its lining label.",
+    legend([{name:"Lined",color:COL.lined},{name:"Unlined",color:COL.unlined},{name:"No lining label",color:COL.none}]) + g);
+
+  // 2. predicted vs measured (log-log)
+  { const L=48, R=14, T=10, B=40, H=Math.min(460, Math.round(W*0.62)), lo=Math.log10(2), hi=Math.log10(300);
+    const sx = v => L + (W-L-R)*(Math.log10(Math.max(2,v))-lo)/(hi-lo), sy = v => T + (H-T-B)*(1-(Math.log10(Math.max(2,v))-lo)/(hi-lo));
+    let s = `<svg class="ch" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+    for (const t of [2,5,10,20,50,100,200]){ s += `<line class="grid" x1="${L}" x2="${W-R}" y1="${sy(t)}" y2="${sy(t)}"/><text class="ax" x="${L-6}" y="${sy(t)+4}" text-anchor="end">${t}</text>`;
+      s += `<line class="grid" x1="${sx(t)}" x2="${sx(t)}" y1="${T}" y2="${H-B}"/><text class="ax" x="${sx(t)}" y="${H-B+16}" text-anchor="middle">${t}</text>`; }
+    const band = [2,300].map(v=>[sx(v),sy(v*1.25)]).concat([300,2].map(v=>[sx(v),sy(v/1.25)]));
+    s += `<path d="M${band.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join("L")}Z" fill="var(--ink)" opacity="0.07"/>`;
+    s += `<line x1="${sx(2)}" y1="${sy(2)}" x2="${sx(300)}" y2="${sy(300)}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+    for (const q of pts) if (q.c!=null){ const x=sx(q.gt).toFixed(1), y=sy(q.c).toFixed(1);
+      s += `<g class="hit" data-tip="${esc(`<b>${q.cc}</b> · ${q.rg}<br>Measured ${nfmt(q.gt,1)} m<br>Esri + Planet ${nfmt(q.c,1)} m (${q.c>=q.gt?"+":""}${nfmt(100*(q.c-q.gt)/q.gt,0)}%)<br>Esri ${q.e!=null?nfmt(q.e,1)+" m":"–"} · Planet ${q.p!=null?nfmt(q.p,1)+" m":"–"}<br>Lining label: ${LN[q.lin]}`)}"><circle cx="${x}" cy="${y}" r="7" fill="transparent"/><circle cx="${x}" cy="${y}" r="3.2" fill="${LC[q.lin]}" fill-opacity="0.85" stroke="var(--bg)" stroke-width="0.8"/></g>`; }
+    { const A=pts.filter(q=>q.c!=null), n=A.length, mx=A.reduce((t,q)=>t+q.gt,0)/n, my=A.reduce((t,q)=>t+q.c,0)/n;
+      let sxy=0,sxx=0,syy=0; for (const q of A){ sxy+=(q.gt-mx)*(q.c-my); sxx+=(q.gt-mx)**2; syy+=(q.c-my)**2; }
+      const r=sxy/Math.sqrt(sxx*syy), mae=A.reduce((t,q)=>t+Math.abs(q.c-q.gt),0)/n, rmse=Math.sqrt(A.reduce((t,q)=>t+(q.c-q.gt)**2,0)/n);
+      const bias=100*(Math.exp(quant(sorted(A.map(q=>Math.log(q.c/q.gt))),.5))-1);
+      const rows=[["Canals",nfmt(n)],["r",r.toFixed(2)],["MAE",nfmt(mae,1)+" m"],["RMSE",nfmt(rmse,1)+" m"],["Median error",nfmt(medAPE(A,"c"),1)+"%"],["Median bias",(bias>=0?"+":"")+nfmt(bias,1)+"%"]];
+      const bx=L+12, by=T+10, bw=168, lh=17;
+      s += `<rect x="${bx}" y="${by}" width="${bw}" height="${rows.length*lh+12}" rx="8" fill="var(--bg)" fill-opacity="0.92" stroke="var(--line)"/>`;
+      rows.forEach(([k,v],i)=>{ s += `<text class="ax" x="${bx+10}" y="${by+20+i*lh}">${k}</text><text class="val" x="${bx+bw-10}" y="${by+20+i*lh}" text-anchor="end" style="font-weight:600">${v}</text>`; }); }
+    s += `<text class="ax" x="${(L+W-R)/2}" y="${H-6}" text-anchor="middle">Measured width (m, log scale)</text>`;
+    s += `<text class="ax" transform="translate(11 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">Modelled width (m, log scale)</text></svg>`;
+    h += sec("Modelled vs measured width", "Cross-validated predictions of the Esri + Planet model (each canal predicted by a model that never saw it). Dashed line = perfect agreement, shaded band = within ±25%.", legend([{name:"Lined",color:COL.lined},{name:"Unlined",color:COL.unlined},{name:"No lining label",color:COL.none}]) + s); }
+
+  // 3. error by width class, per model
+  const CL = [["≤10 m",0,10],["10–20 m",10,20],["20–40 m",20,40],[">40 m",40,1e9]];
+  const grp = CL.map(([l,a,b]) => { const A=pts.filter(q=>q.gt>a && q.gt<=b);
+    return {label:`${l} (${A.length})`, vals:S.map(s=>medAPE(A,s.k)), tips:S.map(s=>`<b>${s.name}</b> · canals ${l}<br>median error ${nfmt(medAPE(A,s.k),1)}%<br>${nfmt(w25(A,s.k),0)}% within ±25%`)}; });
+  grp.push({label:`All (${pts.length})`, vals:S.map(s=>medAPE(pts,s.k)), tips:S.map(s=>`<b>${s.name}</b> · all canals<br>median error ${nfmt(medAPE(pts,s.k),1)}%<br>${nfmt(w25(pts,s.k),0)}% within ±25%`)});
+  h += sec("Median width error by canal width", "Median absolute error as a share of the measured width; number of canals in brackets. Combining both images helps most for narrow and wide canals.",
+    legend(S) + gbars(grp, S, {W, unit:"%", d:1, labelW:110}));
+
+  // 4. error vs number of valid image boxes
+  const NB = [["1–5",1,5],["6–10",6,10],["11–20",11,20],["21+",21,1e9]], S2 = S.slice(0,2);
+  const grp2 = NB.map(([l,a,b]) => { const A=[pts.filter(q=>q.ne>=a&&q.ne<=b), pts.filter(q=>q.np>=a&&q.np<=b)];
+    return {label:`${l} boxes`, vals:S2.map((s,j)=>medAPE(A[j],s.k)), tips:S2.map((s,j)=>`<b>${s.name}</b> · ${l} valid boxes (${A[j].length} canals)<br>median error ${nfmt(medAPE(A[j],s.k),1)}%`)}; });
+  h += sec("More measurements, smaller error", "Median width error by the number of valid image boxes measured along the canal (Esri measures at most 15 boxes per canal).",
+    legend(S2) + catLines(grp2, S2, {W, unit:"%", xLabel:"Valid image boxes measured along the canal", yLabel:"Median width error"}));
+
+  // 5. by region
+  const regs = [...new Set(pts.map(q=>q.rg))].map(rg => { const A=pts.filter(q=>q.rg===rg); return {rg, n:A.length, m:medAPE(A,"c"), w:w25(A,"c")}; }).filter(r=>r.n>=8).sort((a,b)=>a.m-b.m);
+  h += sec("Median width error by region (Esri + Planet)", "Number of ground-truth canals in brackets (regions with at least 8).",
+    hbars(regs.map(r=>({label:`${r.rg} (${r.n})`, value:r.m, tip:`<b>${esc(r.rg)}</b> · ${r.n} canals<br>median error ${nfmt(r.m,1)}%<br>${nfmt(r.w,0)}% within ±25%`})), {W, unit:"%", d:1, labelW:150}));
+
+  // 6. lining: ROC + confusion
+  const vw = W >= 640 ? Math.floor((W-12)/2) : W;
+  const LS = [{k:"esri", name:`Esri (AUC ${nfmt(VAL.lin.esri.auc,2)})`, color:DOT.esri}, {k:"planet", name:`Planet (AUC ${nfmt(VAL.lin.planet.auc,2)})`, color:DOT.planet}];
+  { const L=44, R=12, T=10, B=40, H=Math.min(vw, 360), sx=v=>L+(vw-L-R)*v, sy=v=>T+(H-T-B)*(1-v);
+    let s = `<svg class="ch" width="${vw}" height="${H}" viewBox="0 0 ${vw} ${H}">`;
+    for (const t of [0,.25,.5,.75,1]){ s += `<line class="grid" x1="${L}" x2="${vw-R}" y1="${sy(t)}" y2="${sy(t)}"/><text class="ax" x="${L-6}" y="${sy(t)+4}" text-anchor="end">${nfmt(100*t)}%</text><text class="ax" x="${sx(t)}" y="${H-B+16}" text-anchor="middle">${nfmt(100*t)}%</text>`; }
+    s += `<line x1="${sx(0)}" y1="${sy(0)}" x2="${sx(1)}" y2="${sy(1)}" stroke="var(--muted)" stroke-dasharray="4 3"/>`;
+    for (const l of LS) s += `<path d="M${VAL.lin[l.k].roc.map(([a,b])=>sx(a).toFixed(1)+","+sy(b).toFixed(1)).join("L")}" fill="none" stroke="${l.color}" stroke-width="2" stroke-linejoin="round"/>`;
+    s += `<text class="ax" x="${(L+vw-R)/2}" y="${H-6}" text-anchor="middle">Unlined canals called lined</text><text class="ax" transform="translate(11 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">Lined canals found</text></svg>`;
+    const cm = (k, name) => { const [TP,FN,FP,TN]=VAL.lin[k].cm, n=TP+FN+FP+TN, cell=(v,ok,t)=>`<td class="hit" data-tip="${esc(t)}" style="background:${ok?"color-mix(in srgb, var(--ink2) 24%, transparent)":"var(--chip)"}"><b>${nfmt(v)}</b><span>${nfmt(100*v/n,0)}%</span></td>`;
+      return `<div class="cmx"><div class="cmx-t">${esc(name)}</div><table><tr><th></th><th>called lined</th><th>called unlined</th></tr>
+        <tr><th>lined</th>${cell(TP,1,`Lined canals correctly called lined: ${TP}`)}${cell(FN,0,`Lined canals called unlined: ${FN}`)}</tr>
+        <tr><th>unlined</th>${cell(FP,0,`Unlined canals called lined: ${FP}`)}${cell(TN,1,`Unlined canals correctly called unlined: ${TN}`)}</tr></table>
+        <div class="cmx-n">accuracy ${nfmt(100*(TP+TN)/n,0)}% · lined found ${nfmt(100*TP/(TP+FN),0)}% · called-lined correct ${nfmt(100*TP/(TP+FP),0)}%</div></div>`; };
+    const mt = k => { const [TP,FN,FP,TN]=VAL.lin[k].cm, P=TP/(TP+FP), Rc=TP/(TP+FN); return {acc:(TP+TN)/(TP+FN+FP+TN), prec:P, rec:Rc, f1:2*P*Rc/(P+Rc), auc:VAL.lin[k].auc}; };
+    const ME = [["AUC","auc","Area under the curve: the chance that a randomly picked lined canal gets a higher lined-probability than a randomly picked unlined canal"],
+      ["Accuracy","acc","Share of all canals classified correctly<br><b>Accuracy = (TP + TN) / (TP + TN + FP + FN)</b>"],["Precision","prec","Of the canals called lined, the share that really are lined<br><b>Precision = TP / (TP + FP)</b>"],
+      ["Recall","rec","Of the truly lined canals, the share that were found<br><b>Recall = TP / (TP + FN)</b>"],["F1 score","f1","Balance of precision and recall (their harmonic mean); for lined canals<br><b>F1 = 2 × Precision × Recall / (Precision + Recall)</b>"]];
+    const aucInfo = `<table class="mtab"><tr><th></th>${LS.map(l=>`<th><i style="background:${l.color}"></i>${l.k==="esri"?"Esri":"Planet"}</th>`).join("")}</tr>` +
+      ME.map(([n,k,t])=>`<tr class="hit" data-tip="${esc(t + (k==="auc" ? "" : "<br><span style=\"color:var(--muted)\">TP = lined called lined, TN = unlined called unlined, FP = unlined called lined, FN = lined called unlined</span>"))}"><td>${n}</td>${LS.map(l=>{ const v=mt(l.k)[k]; return `<td><b>${k==="auc"?v.toFixed(2):nfmt(100*v,0)+"%"}</b></td>`; }).join("")}</tr>`).join("") + `</table>
+      <div class="howto"><b>How to read the curve.</b> Each model gives every canal a probability of being lined. Sliding the cut-off from strict to lenient traces the curve: the higher it rises on the left, the more lined canals the model finds before it starts calling unlined canals lined. A model that only guesses follows the dashed diagonal (AUC 0.5); a perfect model hugs the top-left corner (AUC 1.0). AUC 0.86 means that for a random lined and a random unlined canal, the model ranks the lined one higher 86% of the time. Accuracy, precision, recall and F1 are at a 50% cut-off.</div>`;
+    h += sec("Lining classification", `Cross-validated on ${nfmt(VAL.n_lin)} hand-labelled canals (${nfmt(VAL.n_lin_lined)} lined) in ${VAL.n_lin_cc} countries. Left: how many lined canals are found for each rate of false alarms (top-left is best, dashed = guessing). Right: results at a 50% probability cut-off. Main canals use the Esri model; minor canals use Planet.`,
+      legend(LS) + `<div class="vgrid"><div>${s}${aucInfo}</div><div>${cm("esri","Esri model (main canals)")}${cm("planet","Planet model (minor canals)")}</div></div>`); }
+  return h;
+}
+
+const STAT_DEFS = {width:["Width", widthStats], length:["Length", lengthStats], lining:["Lining", liningStats], count:["Count", countStats], validation:["Training & validation", validationStats]};
+function openStats(kind){
+  if (!DATA) return;
+  const [title, fn] = STAT_DEFS[kind], P = shownFeatures();
+  const box = document.getElementById("cmodal"); box.style.display = "flex";
+  document.getElementById("ctitle").textContent = title + " statistics";
+  document.getElementById("csub").textContent = "";
+  const body = document.getElementById("cbody"); body.innerHTML = "";
+  const W = Math.max(300, body.clientWidth - 44);
+  lineCharts = {}; body.innerHTML = fn(P, W); bindLineCharts(); body.scrollTop = 0;
+  document.querySelectorAll("#stats-btns button").forEach(b => b.classList.toggle("on", b.dataset.s===kind));
+}
+function closeStats(){ document.getElementById("cmodal").style.display="none"; hideTip(); document.getElementById("cpop").style.display="none"; document.querySelectorAll("#stats-btns button").forEach(b=>b.classList.remove("on")); }
+document.querySelectorAll("#stats-btns button").forEach(b => b.onclick = () => openStats(b.dataset.s));
+document.getElementById("cclose").onclick = closeStats;
+document.getElementById("cmodal").addEventListener("click", e => { if (e.target.id==="cmodal") closeStats(); });
+document.addEventListener("keydown", e => { if (e.key==="Escape" && document.getElementById("cmodal").style.display==="flex"){ closeStats(); e.stopImmediatePropagation(); } });
+document.getElementById("cbody").addEventListener("mousemove", e => {
+  const h = e.target.closest(".hit"); if (h) showTip(h.dataset.tip, e.clientX, e.clientY); else if (!e.target.classList.contains("ov")) hideTip(); });
+document.getElementById("cbody").addEventListener("mouseleave", hideTip);
+// click a bar / dot with a target -> "Show on map" popover
+let popAct = null;
+const cpop = document.getElementById("cpop");
+document.getElementById("cbody").addEventListener("click", e => {
+  const h = e.target.closest("[data-act]");
+  if (!h){ cpop.style.display="none"; return; }
+  popAct = h.dataset.act; cpop.style.display="block";
+  cpop.style.left = Math.min(e.clientX+8, innerWidth-cpop.offsetWidth-8)+"px"; cpop.style.top = Math.min(e.clientY+8, innerHeight-cpop.offsetHeight-8)+"px";
+  hideTip(); e.stopPropagation();
+});
+function featsBounds(fs){
+  let b=[180,90,-180,-90];
+  for (const f of fs){ const g=f.geometry, cs = g.type==="LineString" ? g.coordinates : g.coordinates.flat();
+    for (const [x,y] of cs){ if (x<b[0]) b[0]=x; if (y<b[1]) b[1]=y; if (x>b[2]) b[2]=x; if (y>b[3]) b[3]=y; } }
+  return [[b[0],b[1]],[b[2],b[3]]];
+}
+const MAPPAD = () => ({top:60, bottom:60, left:360, right: document.getElementById("info").style.display==="block" ? 420 : 60});
+document.getElementById("cpop-btn").onclick = () => {
+  cpop.style.display="none"; closeStats();
+  const [kind, ...rest] = popAct.split(":"), key = rest.join(":");
+  if (kind === "canal"){
+    const f = DATA.features.find(f => f.properties.id === key); if (!f) return;
+    const cs = f.geometry.type==="LineString" ? f.geometry.coordinates : f.geometry.coordinates.flat();
+    openCanalPopup(cs[Math.floor(cs.length/2)], popupHTML(f.properties), f.properties);
+    map.fitBounds(featsBounds([f]), {padding:MAPPAD(), maxZoom:12, duration:1200});
+  } else if (kind === "net"){
+    const fs = DATA.features.filter(f => String(f.properties.sys) === key); if (!fs.length) return;
+    closeInfo(); focusKey = key; applyFocus();
+    map.fitBounds(featsBounds(fs), {padding:MAPPAD(), maxZoom:11, duration:1200});
+  } else if (kind === "cc"){
+    const fs = DATA.features.filter(f => f.properties.cc === key); if (!fs.length) return;
+    closeInfo();
+    map.fitBounds(featsBounds(fs), {padding:MAPPAD(), maxZoom:9, duration:1200});
+  }
+};
+document.addEventListener("mousedown", e => { if (!e.target.closest("#cpop") && !e.target.closest("[data-act]")) cpop.style.display="none"; });
+
+
+document.getElementById("info-close").onclick = closeInfo;
+document.addEventListener("keydown", e => { if (e.key==="Escape" && !measuring && document.getElementById("info").style.display==="block" && document.getElementById("cmodal").style.display!=="flex") closeInfo(); });
+// ---------------- theme ----------------
+const themeBtn = document.getElementById("theme-btn");
+function setTheme(dark){ document.body.classList.toggle("dark", dark); themeBtn.textContent = dark ? "Light" : "Dark"; }
+themeBtn.onclick = () => setTheme(!document.body.classList.contains("dark"));
+setTheme(true);
+
+// ---------------- load ----------------
+map.on("load", async () => {
+  document.querySelectorAll(".maplibregl-ctrl-attrib").forEach(a => { a.classList.remove("maplibregl-compact-show"); a.removeAttribute("open"); });
+  await UNLOCK;
+  if (ENC){ pmProto.add(new pmtiles.PMTiles(new EncSource(OTHERS_URL, "ibt_other_canals.pmtiles")));
+            pmProto.add(new pmtiles.PMTiles(new EncSource(US3DHP_URL, "ibt_us3dhp_canals.pmtiles"))); }
+  if (!isPM){ DATA = await getJSON(DATA_URL); buildLegends(); }
+  addCanals(); addMeasureLayers(); bindInteraction(); updateStats();
+});
+</script>
+<div id="lock" style="display:none"><form id="lock-form" autocomplete="on">
+  <h2>Inter-basin Water Transfers</h2><p>Width and lining information for main canals. This viewer is password protected.</p>
+  <input type="password" id="lock-pw" placeholder="Password" autocomplete="current-password" required>
+  <label class="lock-rem"><input type="checkbox" id="lock-rem"> Remember on this device</label>
+  <button type="submit">Open viewer</button><div id="lock-err"></div></form></div>
+</body>
+</html>
