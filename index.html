@@ -99,6 +99,9 @@
   .lock-rem{display:flex;align-items:center;gap:6px;margin:10px 0 14px;font-size:12px;color:#c9b8b3}
   #lock-form button{width:100%;padding:9px;border-radius:8px;border:0;background:#f3ece6;color:#2a1013;font-weight:600;font-size:14px;cursor:pointer}
   #lock-form button:disabled{opacity:.6;cursor:wait} #lock-err{color:#ff8a80;font-size:12px;margin-top:10px;min-height:14px}
+  .vm-seg{display:inline-flex;gap:0;margin:2px 0 8px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .vm-btn{font:600 12px system-ui,sans-serif;padding:5px 12px;border:0;background:var(--chip);color:var(--ink2);cursor:pointer} .vm-btn+.vm-btn{border-left:1px solid var(--line)}
+  .vm-btn.on{background:var(--ink);color:var(--bg)}
   .stat b.sub{margin:5px 0 0;padding-top:4px;border-top:1px solid var(--line);font-size:15px;color:var(--ink)}
   h2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
   .legend-row{display:flex;align-items:center;gap:8px;margin:3px 0;cursor:pointer;user-select:none}
@@ -176,9 +179,6 @@
   <h2>Predicted width (thickness)</h2>
   <div class="wscale" id="wscale"></div>
 
-  <h2>Filters</h2>
-  <label style="display:block">Minimum canal length: <span class="rangeval" id="lenval"></span></label>
-  <input type="range" id="minlen" min="0" max="200" step="5" value="0">
 
 
   <h2>Basemap</h2>
@@ -412,11 +412,10 @@ function updateStats(){
   document.getElementById("stats").innerHTML =
     `<div class="stat" title="All IBT networks, including the ones made only of minor canals (fixed total)"><b>${fmt(ALL_IBT.nets)}</b><span>IBT networks</span>
         <b class="sub" title="IBT networks with at least one main canal (after filters)">${fmt(nets.size)}</b><span>with canals atleast >20km</span></div>
-     <div class="stat" title="Length of all IBT canals, main + minor (fixed total)"><b>${fmt(ALL_IBT.km)} km</b><span>canal length</span>
-        <b class="sub" title="Length of the main canals shown (after filters)">${fmt(km)} km</b><span>main canals</span></div>
-     <div class="stat" title="Share of main canals with a lining estimate that are lined"><b>${linedKnown? Math.round(100*lined/linedKnown):0}%</b><span>lined (main canals)</span></div>
-     <div class="stat" title="All IBT canals, main + minor (fixed total)"><b>${fmt(ALL_IBT.canals)}</b><span>IBT canals</span>
-        <b class="sub" title="Main canals shown (after filters)">${fmt(n)}</b><span>main canals shown</span></div>`;
+     <div class="stat" title="Length of all IBT canals, main + minor (fixed total)"><b>${fmt(ALL_IBT.km)} km</b><span>total canal length</span>
+        <b class="sub" title="Length of the main canals shown (after filters)">${fmt(km)} km</b><span>canals >20km</span></div>
+     <div class="stat" title="Share of main canals with a lining estimate that are lined"><b>${linedKnown? Math.round(100*lined/linedKnown):0}%</b><span>lined</span></div>
+     <div class="stat" title="All IBT canals, main + minor (fixed total)"><b>${fmt(ALL_IBT.canals)}</b><span>IBT canals</span></div>`;
 }
 
 function buildLegends(){
@@ -556,9 +555,6 @@ function bindInteraction(){
 }
 
 // ---------------- controls ----------------
-const lenEl = document.getElementById("minlen"), lenVal = document.getElementById("lenval");
-lenEl.oninput = () => { filters.minlen = +lenEl.value; lenVal.textContent = lenEl.value + " km"; applyFilters(); };
-lenVal.textContent = "0 km";
 const BASINS_URL = "data/ibt_hydrobasins_lev05.geojson";
 let basinsOn = false, BASINS = null, basinsLoading = null, hlIds = [];
 const HL = "#ffd23f";
@@ -948,9 +944,14 @@ function lengthStats(P, W){
   let h = sec("Top 30 IBT networks by total network length",
     "Total length of every IBT canal in the network, including the smaller canals.",
     hbars(top, {W, unit:" km", labelW:Math.min(280, W*0.42)}));
-  const lc = P.filter(p=>p.len>0).sort((a,b)=>b.len-a.len).slice(0,50).map(p=>({act:'canal:'+p.id, label:`${p.cc} · ${cname(p)}`, value:p.len,
-    tip:`<b>${esc(cname(p))}</b> (${p.cc})<br>${nfmt(p.len,1)} km${p.w!==undefined?` · ${nfmt(p.w,1)} m wide`:""}<br>${esc(sname(p))}`}));
-  h += sec("Top 50 individual canals by length", "Length of each main canal on its own (not its whole network).",
+  // named canals split into several pieces (e.g. California Aqueduct) are summed: same name within the same IBT system
+  const byName = {};
+  for (const p of P){ if (!(p.len>0)) continue; const nm = p.name_tr || p.name;
+    const key = nm ? `${p.sys}|${nm}` : `id|${p.id}`; const g = (byName[key] ||= {p, km:0, n:0, longest:p});
+    g.km += p.len; g.n++; if (p.len > g.longest.len) g.longest = p; }
+  const lc = Object.values(byName).sort((a,b)=>b.km-a.km).slice(0,50).map(g=>({act:'canal:'+g.longest.id, label:`${g.p.cc} · ${cname(g.p)}`, value:g.km,
+    tip:`<b>${esc(cname(g.p))}</b> (${g.p.cc})<br>${nfmt(g.km,1)} km${g.n>1?` in ${g.n} sections (longest ${nfmt(g.longest.len,1)} km)`:""}${g.n===1&&g.p.w!==undefined?` · ${nfmt(g.p.w,1)} m wide`:""}<br>${esc(sname(g.p))}`}));
+  h += sec("Top 50 individual canals by length", "Length of each named canal (sections with the same name in the same IBT system are added together), not its whole network.",
     hbars(lc, {W, unit:" km", d:0, labelW:Math.min(280, W*0.42)}));
   const SP = P.filter(p=>p.w!==undefined && p.len>0);
   h += sec("Canal length vs predicted width",
@@ -1076,6 +1077,12 @@ function catLines(groups, series, {W, H=260, unit="", xLabel="", yLabel=""}){
   });
   return g + `</svg>`;
 }
+let VMODEL = "c", VSCAT = null;   // model shown in the modelled-vs-measured scatter
+document.getElementById("cbody").addEventListener("click", e => {
+  const bt = e.target.closest(".vm-btn"); if (!bt || !VSCAT) return;
+  VMODEL = bt.dataset.k; document.querySelectorAll(".vm-btn").forEach(x => x.classList.toggle("on", x===bt));
+  document.getElementById("vscatter").innerHTML = VSCAT(VMODEL);
+});
 function validationStats(P, W){
   if (!VAL || !COUNTRIES){
     if (!valLoading){ valLoading = true; Promise.all([getJSON(VAL_URL).then(d=>{ VAL=d; }), loadCountries()])
@@ -1108,7 +1115,8 @@ function validationStats(P, W){
     legend([{name:"Lined",color:COL.lined},{name:"Unlined",color:COL.unlined},{name:"No lining label",color:COL.none}]) + g);
 
   // 2. predicted vs measured (log-log)
-  { const L=48, R=14, T=10, B=40, H=Math.min(460, Math.round(W*0.62)), lo=Math.log10(2), hi=Math.log10(300);
+  const MN = {c:"Esri + Planet", e:"Esri", p:"Planet"};
+  const scat = K => { const L=48, R=14, T=10, B=40, H=Math.min(460, Math.round(W*0.62)), lo=Math.log10(2), hi=Math.log10(300);
     const sx = v => L + (W-L-R)*(Math.log10(Math.max(2,v))-lo)/(hi-lo), sy = v => T + (H-T-B)*(1-(Math.log10(Math.max(2,v))-lo)/(hi-lo));
     let s = `<svg class="ch" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
     for (const t of [2,5,10,20,50,100,200]){ s += `<line class="grid" x1="${L}" x2="${W-R}" y1="${sy(t)}" y2="${sy(t)}"/><text class="ax" x="${L-6}" y="${sy(t)+4}" text-anchor="end">${t}</text>`;
@@ -1116,19 +1124,34 @@ function validationStats(P, W){
     const band = [2,300].map(v=>[sx(v),sy(v*1.25)]).concat([300,2].map(v=>[sx(v),sy(v/1.25)]));
     s += `<path d="M${band.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join("L")}Z" fill="var(--ink)" opacity="0.07"/>`;
     s += `<line x1="${sx(2)}" y1="${sy(2)}" x2="${sx(300)}" y2="${sy(300)}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 3"/>`;
-    for (const q of pts) if (q.c!=null){ const x=sx(q.gt).toFixed(1), y=sy(q.c).toFixed(1);
-      s += `<g class="hit" data-tip="${esc(`<b>${q.cc}</b> · ${q.rg}<br>Measured ${nfmt(q.gt,1)} m<br>Esri + Planet ${nfmt(q.c,1)} m (${q.c>=q.gt?"+":""}${nfmt(100*(q.c-q.gt)/q.gt,0)}%)<br>Esri ${q.e!=null?nfmt(q.e,1)+" m":"–"} · Planet ${q.p!=null?nfmt(q.p,1)+" m":"–"}<br>Lining label: ${LN[q.lin]}`)}"><circle cx="${x}" cy="${y}" r="7" fill="transparent"/><circle cx="${x}" cy="${y}" r="3.2" fill="${LC[q.lin]}" fill-opacity="0.85" stroke="var(--bg)" stroke-width="0.8"/></g>`; }
-    { const A=pts.filter(q=>q.c!=null), n=A.length, mx=A.reduce((t,q)=>t+q.gt,0)/n, my=A.reduce((t,q)=>t+q.c,0)/n;
-      let sxy=0,sxx=0,syy=0; for (const q of A){ sxy+=(q.gt-mx)*(q.c-my); sxx+=(q.gt-mx)**2; syy+=(q.c-my)**2; }
-      const r=sxy/Math.sqrt(sxx*syy), mae=A.reduce((t,q)=>t+Math.abs(q.c-q.gt),0)/n, rmse=Math.sqrt(A.reduce((t,q)=>t+(q.c-q.gt)**2,0)/n);
-      const bias=100*(Math.exp(quant(sorted(A.map(q=>Math.log(q.c/q.gt))),.5))-1);
-      const rows=[["Canals",nfmt(n)],["r",r.toFixed(2)],["MAE",nfmt(mae,1)+" m"],["RMSE",nfmt(rmse,1)+" m"],["Median error",nfmt(medAPE(A,"c"),1)+"%"],["Median bias",(bias>=0?"+":"")+nfmt(bias,1)+"%"]];
-      const bx=L+12, by=T+10, bw=168, lh=17;
-      s += `<rect x="${bx}" y="${by}" width="${bw}" height="${rows.length*lh+12}" rx="8" fill="var(--bg)" fill-opacity="0.92" stroke="var(--line)"/>`;
-      rows.forEach(([k,v],i)=>{ s += `<text class="ax" x="${bx+10}" y="${by+20+i*lh}">${k}</text><text class="val" x="${bx+bw-10}" y="${by+20+i*lh}" text-anchor="end" style="font-weight:600">${v}</text>`; }); }
+    for (const q of pts) if (q[K]!=null){ const x=sx(q.gt).toFixed(1), y=sy(q[K]).toFixed(1);
+      s += `<g class="hit" data-tip="${esc(`<b>${q.cc}</b> · ${q.rg}<br>Measured ${nfmt(q.gt,1)} m<br>${MN[K]} model ${nfmt(q[K],1)} m (${q[K]>=q.gt?"+":""}${nfmt(100*(q[K]-q.gt)/q.gt,0)}%)<br>Esri ${q.e!=null?nfmt(q.e,1)+" m":"–"} · Planet ${q.p!=null?nfmt(q.p,1)+" m":"–"}<br>Lining label: ${LN[q.lin]}`)}"><circle cx="${x}" cy="${y}" r="7" fill="transparent"/><circle cx="${x}" cy="${y}" r="3.2" fill="${LC[q.lin]}" fill-opacity="0.85" stroke="var(--bg)" stroke-width="0.8"/></g>`; }
+    { const M = A => { const n=A.length, mx=A.reduce((t,q)=>t+q.gt,0)/n, my=A.reduce((t,q)=>t+q[K],0)/n;
+        let sxy=0,sxx=0,syy=0; for (const q of A){ sxy+=(q.gt-mx)*(q[K]-my); sxx+=(q.gt-mx)**2; syy+=(q[K]-my)**2; }
+        const bias=100*(Math.exp(quant(sorted(A.map(q=>Math.log(q[K]/q.gt))),.5))-1);
+        return [nfmt(n), (sxy/Math.sqrt(sxx*syy)).toFixed(2), nfmt(A.reduce((t,q)=>t+Math.abs(q[K]-q.gt),0)/n,1)+" m",
+                nfmt(Math.sqrt(A.reduce((t,q)=>t+(q[K]-q.gt)**2,0)/n),1)+" m", nfmt(medAPE(A,K),1)+"%", (bias>=0?"+":"")+nfmt(bias,1)+"%"]; };
+      const Aall = pts.filter(q=>q[K]!=null), cols = [["All", Aall, "var(--ink)"], ["Lined", Aall.filter(q=>q.lin===1), COL.lined], ["Unlined", Aall.filter(q=>q.lin===0), COL.unlined]].map(([nm,A,c])=>[nm, M(A), c]);
+      const names = ["Canals","r","MAE","RMSE","Median error","Median bias"];
+      const bx=L+12, by=T+10, lw=92, cw=62, bw=lw+cw*cols.length+10, lh=17, top=22;
+      s += `<rect x="${bx}" y="${by}" width="${bw}" height="${top+names.length*lh+10}" rx="8" fill="var(--bg)" fill-opacity="0.92" stroke="var(--line)"/>`;
+      cols.forEach(([nm,,c],j)=>{ const x=bx+lw+cw*(j+1); s += `${j ? `<circle cx="${x-cw+14}" cy="${by+15}" r="3.5" fill="${c}"/>` : ""}<text class="ax" x="${x}" y="${by+19}" text-anchor="end">${nm}</text>`; });
+      const yk = `<br><span style="color:var(--muted)">y = measured width, ŷ = modelled width, n = number of canals</span>`;
+      const tips = ["Number of ground-truth canals in the group (All also includes canals without a lining label)",
+        "Pearson correlation between measured and modelled widths (1 = perfect straight-line agreement)<br><b>r = Σ(y − ȳ)(ŷ − ŷ̄) / √[Σ(y − ȳ)² · Σ(ŷ − ŷ̄)²]</b>" + yk,
+        "Mean absolute error: the average size of the miss, in metres<br><b>MAE = (1/n) · Σ |ŷ − y|</b>" + yk,
+        "Root-mean-square error: like MAE but gives more weight to large misses<br><b>RMSE = √[(1/n) · Σ (ŷ − y)²]</b>" + yk,
+        "Median absolute percentage error: the typical miss relative to the canal's width<br><b>Median error = median( |ŷ − y| / y ) × 100%</b>" + yk,
+        "Typical over- (+) or under-prediction (−), as a percentage of the measured width<br><b>Median bias = ( exp[ median( ln(ŷ / y) ) ] − 1 ) × 100%</b>" + yk];
+      names.forEach((k,i)=>{ const y=by+top+18+i*lh; s += `<g class="hit" data-tip="${esc(tips[i])}"><rect x="${bx+2}" y="${y-12}" width="${bw-4}" height="${lh}" fill="transparent"/><text class="ax" x="${bx+10}" y="${y}">${k}</text>`;
+        cols.forEach(([,v],j)=>{ s += `<text class="val" x="${bx+lw+cw*(j+1)}" y="${y}" text-anchor="end" style="font-weight:600">${v[i]}</text>`; }); s += `</g>`; }); }
     s += `<text class="ax" x="${(L+W-R)/2}" y="${H-6}" text-anchor="middle">Measured width (m, log scale)</text>`;
     s += `<text class="ax" transform="translate(11 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">Modelled width (m, log scale)</text></svg>`;
-    h += sec("Modelled vs measured width", "Cross-validated predictions of the Esri + Planet model (each canal predicted by a model that never saw it). Dashed line = perfect agreement, shaded band = within ±25%.", legend([{name:"Lined",color:COL.lined},{name:"Unlined",color:COL.unlined},{name:"No lining label",color:COL.none}]) + s); }
+    return s; };
+  VSCAT = scat;
+  h += sec("Modelled vs measured width", "",
+    `<div class="vm-seg">${["c","e","p"].map(k=>`<button type="button" class="vm-btn${k===VMODEL?" on":""}" data-k="${k}">${MN[k]} model${k==="c"?" (used)":""}</button>`).join("")}</div>` +
+    legend([{name:"Lined",color:COL.lined},{name:"Unlined",color:COL.unlined},{name:"No lining label",color:COL.none}]) + `<div id="vscatter">${scat(VMODEL)}</div>`);
 
   // 3. error by width class, per model
   const CL = [["≤10 m",0,10],["10–20 m",10,20],["20–40 m",20,40],[">40 m",40,1e9]];
